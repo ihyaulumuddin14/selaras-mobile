@@ -1,3 +1,5 @@
 package com.example.selaras.domain.model
 
-data class CheckIn()
+data class CheckIn(
+    val id: Long
+)
