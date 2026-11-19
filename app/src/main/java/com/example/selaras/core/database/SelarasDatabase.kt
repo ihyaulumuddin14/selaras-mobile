@@ -49,6 +49,30 @@ abstract class SelarasDatabase : RoomDatabase() {
         const val DATABASE_NAME = "selaras.db"
 
         /**
+         * Builds encrypted Room database backed by SQLCipher.
+         *
+         * Order of execution:
+         * 1. Loads SQLCipher native library via [System.loadLibrary].
+         * 2. Creates [net.sqlcipher.database.SupportFactory] using DEK passphrase bytes.
+         * 3. Configures Room database with [openHelperFactory].
+         */
+        fun buildEncrypted(
+            context: Context,
+            passphrase: ByteArray,
+            databaseName: String = DATABASE_NAME
+        ): SelarasDatabase {
+            System.loadLibrary("sqlcipher")
+            val factory = net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase)
+            return Room.databaseBuilder(
+                context.applicationContext,
+                SelarasDatabase::class.java,
+                databaseName
+            )
+                .openHelperFactory(factory)
+                .build()
+        }
+
+        /**
          * Standard unencrypted database builder (e.g. for in-memory tests).
          */
         fun buildInMemory(context: Context): SelarasDatabase {
