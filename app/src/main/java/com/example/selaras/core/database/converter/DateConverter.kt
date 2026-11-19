@@ -4,8 +4,11 @@ import androidx.room.TypeConverter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 class DateConverter {
+
+    private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
     @TypeConverter
     fun fromLocalDate(value: LocalDate?): String? {
@@ -29,11 +32,17 @@ class DateConverter {
 
     @TypeConverter
     fun fromLocalTime(value: LocalTime?): String? {
-        return value?.toString()
+        return value?.format(timeFormatter)
     }
 
     @TypeConverter
     fun toLocalTime(value: String?): LocalTime? {
-        return value?.let { LocalTime.parse(it) }
+        return value?.let {
+            if (it.length == 5) {
+                LocalTime.parse("$it:00", timeFormatter)
+            } else {
+                LocalTime.parse(it, timeFormatter)
+            }
+        }
     }
 }
