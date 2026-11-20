@@ -1,0 +1,27 @@
+package com.example.selaras
+
+import com.example.selaras.domain.model.BreathingPattern
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Test
+
+class BreathingPatternTest {
+    @Test fun `approved default patterns have the right rhythm`() {
+        assertEquals(4, BreathingPattern.defaults.size)
+        assertEquals(
+            listOf(4 to 6, 5 to 5, 3 to 5, 5 to 7),
+            BreathingPattern.defaults.map { it.inhaleSeconds to it.exhaleSeconds }
+        )
+        assertFalse(BreathingPattern.defaults.first().isCustom)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `inhale duration cannot be zero`() {
+        BreathingPattern("invalid", "Terlalu Cepat", 0, 6)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `exhale duration cannot exceed sixty seconds`() {
+        BreathingPattern("invalid", "Terlalu Lama", 4, 61)
+    }
+}
