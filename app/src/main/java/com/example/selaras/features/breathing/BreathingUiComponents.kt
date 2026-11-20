@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,7 +51,11 @@ internal fun BreathingHeader(
             modifier = Modifier.size(54.dp).clickable(role = Role.Button, onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
-            Text("←", fontSize = 27.sp, color = BreathingColors.Primary)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Kembali",
+                tint = BreathingColors.Primary
+            )
         }
         Text(
             title,

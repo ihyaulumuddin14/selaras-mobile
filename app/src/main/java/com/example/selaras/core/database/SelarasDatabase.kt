@@ -29,7 +29,7 @@ import com.example.selaras.data.local.entity.ScreeningResultEntity
         CustomBreathingPatternEntity::class,
         CounselorSummaryEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(
@@ -69,6 +69,7 @@ abstract class SelarasDatabase : RoomDatabase() {
                 databaseName
             )
                 .openHelperFactory(factory)
+                .fallbackToDestructiveMigration(true)
                 .build()
         }
 

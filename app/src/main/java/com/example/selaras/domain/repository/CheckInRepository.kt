@@ -5,9 +5,10 @@ import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
 interface CheckInRepository {
-    suspend fun saveCheckIn(checkIn: CheckIn): Result<Long>
+    suspend fun saveCheckIn(checkIn: CheckIn): Result<CheckIn>
     suspend fun updateCheckIn(checkIn: CheckIn): Result<Unit>
     suspend fun deleteCheckIn(checkIn: CheckIn): Result<Unit>
+    suspend fun deleteCheckInById(id: Long): Result<Unit>
     suspend fun getCheckInByDate(date: LocalDate): CheckIn?
     fun getCheckInByDateFlow(date: LocalDate): Flow<CheckIn?>
     suspend fun getCheckInsBetween(startDate: LocalDate, endDate: LocalDate): List<CheckIn>
@@ -15,4 +16,5 @@ interface CheckInRepository {
     fun getAllCheckInsFlow(): Flow<List<CheckIn>>
     suspend fun getLatestCheckIn(): CheckIn?
     suspend fun countCheckInsBetween(startDate: LocalDate, endDate: LocalDate): Int
+    suspend fun getCheckInByUuid(uuid: String): CheckIn?
 }

@@ -40,7 +40,7 @@ data class BreathingUiState(
 
 /** UI events flow through this ViewModel; no breathing session history is persisted. */
 class BreathingViewModel(repository: BreathingRepository) : ViewModel() {
-    private val getPatterns = GetBrethingPatternUseCase(repository)
+    private val getPatterns = GetBreathingPatternUseCase(repository)
     private val savePattern = SaveCustomBreathingPatternUseCase(repository)
     private val updatePattern = UpdateCustomBreathingPatternUseCase(repository)
     private val deletePattern = DeleteCustomBreathingPatternUseCase(repository)
@@ -116,15 +116,58 @@ class BreathingViewModel(repository: BreathingRepository) : ViewModel() {
         _uiState.update { it.copy(isSaving = true, error = null) }
         viewModelScope.launch {
             try {
-                val id = if (state.editingId == null) {
-                    savePattern(name, requireNotNull(inhale), requireNotNull(exhale))
+                if (state.editingId == null) {
+                    val newPattern = BreathingPattern(
+                        key = "temp",
+                        name = name,
+                        inhaleSeconds = requireNotNull(inhale),
+                        exhaleSeconds = requireNotNull(exhale)
+                    )
+                    savePattern(newPattern).fold(
+                        onSuccess = { saved ->
+                            _uiState.update {
+                                it.copy(
+                                    isSaving = false,
+                                    page = BreathingPage.CATALOG,
+                                    selectedKey = saved.key,
+                                    editingId = null,
+                                    error = null
+                                )
+                            }
+                        },
+                        onFailure = { err ->
+                            _uiState.update { it.copy(isSaving = false, error = "Gagal menyimpan pola: ${err.message}") }
+                        }
+                    )
                 } else {
-                    updatePattern(state.editingId, name, requireNotNull(inhale), requireNotNull(exhale))
-                    state.editingId
-                }
-                _uiState.update {
-                    it.copy(isSaving = false, page = BreathingPage.CATALOG,
-                        selectedKey = "custom:$id", editingId = null, error = null)
+                    val existing = state.customPatterns.firstOrNull { it.id == state.editingId }
+                    val updatedPattern = existing?.copy(
+                        name = name,
+                        inhaleSeconds = requireNotNull(inhale),
+                        exhaleSeconds = requireNotNull(exhale)
+                    ) ?: BreathingPattern(
+                        key = "custom:${state.editingId}",
+                        id = state.editingId,
+                        name = name,
+                        inhaleSeconds = requireNotNull(inhale),
+                        exhaleSeconds = requireNotNull(exhale)
+                    )
+                    updatePattern(updatedPattern).fold(
+                        onSuccess = {
+                            _uiState.update {
+                                it.copy(
+                                    isSaving = false,
+                                    page = BreathingPage.CATALOG,
+                                    selectedKey = "custom:${state.editingId}",
+                                    editingId = null,
+                                    error = null
+                                )
+                            }
+                        },
+                        onFailure = { err ->
+                            _uiState.update { it.copy(isSaving = false, error = "Gagal memperbarui pola: ${err.message}") }
+                        }
+                    )
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -140,11 +183,21 @@ class BreathingViewModel(repository: BreathingRepository) : ViewModel() {
         _uiState.update { it.copy(isSaving = true, error = null) }
         viewModelScope.launch {
             try {
-                deletePattern(id)
-                _uiState.update {
-                    it.copy(page = BreathingPage.CATALOG, editingId = null, isSaving = false,
-                        selectedKey = it.selectedKey?.takeUnless { key -> key == "custom:$id" })
-                }
+                deletePattern(id).fold(
+                    onSuccess = {
+                        _uiState.update {
+                            it.copy(
+                                page = BreathingPage.CATALOG,
+                                editingId = null,
+                                isSaving = false,
+                                selectedKey = it.selectedKey?.takeUnless { key -> key == "custom:$id" }
+                            )
+                        }
+                    },
+                    onFailure = { err ->
+                        _uiState.update { it.copy(isSaving = false, error = "Gagal menghapus pola: ${err.message}") }
+                    }
+                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
