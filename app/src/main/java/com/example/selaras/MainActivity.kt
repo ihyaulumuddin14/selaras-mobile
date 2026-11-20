@@ -6,30 +6,40 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
 import com.example.selaras.core.ui.theme.SelarasTheme
-import com.example.selaras.features.breathing.BreathingScreen
-import com.example.selaras.features.breathing.BreathingViewModel
+import com.example.selaras.features.onboarding.OnboardingScreen
+import com.example.selaras.features.onboarding.OnboardingViewModel
 
 class MainActivity : ComponentActivity() {
-    private lateinit var breathingViewModel: BreathingViewModel
+
+    private lateinit var onboardingViewModel: OnboardingViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = (application as SelarasApplication).container.breathingRepository
-        breathingViewModel = ViewModelProvider(
+        val container = (application as SelarasApplication).container
+
+        onboardingViewModel = ViewModelProvider(
             this,
-            BreathingViewModel.Factory(repository)
-        )[BreathingViewModel::class.java]
+            OnboardingViewModel.Factory(
+                repository = container.appSettingsRepository,
+                isPinSetProvider = { container.pinManager.isPinSet() }
+            )
+        )[OnboardingViewModel::class.java]
+
         enableEdgeToEdge()
         setContent {
             SelarasTheme(darkTheme = false, dynamicColor = false) {
-                // Temporary preview entry: replace with AppNavigation when team routes land.
-                BreathingScreen(viewModel = breathingViewModel, onExit = ::finish)
+                // Mode testing: forceShowOnboarding = true agar Splash selalu lanjut ke 4 Slide Carousel & Consent
+                OnboardingScreen(
+                    viewModel = onboardingViewModel,
+                    forceShowOnboarding = true,
+                    onNavigateToDashboard = {
+                        // Callback selesai onboarding
+                    },
+                    onNavigateToAppLock = {
+                        // Callback jika pengguna sudah memiliki PIN
+                    }
+                )
             }
         }
-    }
-
-    override fun onStop() {
-        if (::breathingViewModel.isInitialized) breathingViewModel.onAppBackgrounded()
-        super.onStop()
     }
 }
