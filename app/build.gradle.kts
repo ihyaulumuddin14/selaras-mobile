@@ -70,4 +70,6 @@ dependencies {
     // SQLCipher Encryption
     implementation(libs.sqlcipher.android)
     implementation(libs.androidx.sqlite)
+
+    implementation("androidx.compose.material:material-icons-core")
 }

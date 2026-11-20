@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import com.example.selaras.domain.model.CheckIn
 import com.example.selaras.domain.model.WeeklyCheckInAnalysis
 import java.time.format.DateTimeFormatter
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
 
 internal object CheckInColors {
     val Primary = Color(0xFF356859)
@@ -130,9 +133,13 @@ private fun CheckInHeader(
             modifier = Modifier
                 .size(48.dp)
                 .clickable(role = Role.Button, onClick = onBack),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
-            Text("←", fontSize = 24.sp, color = CheckInColors.Primary)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Kembali",
+                tint = CheckInColors.Primary
+            )
         }
         Text(
             text = title,
@@ -521,7 +528,7 @@ private fun MoodStep(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
         ) {
-            Text("Lanjut ke Energi →", fontWeight = FontWeight.SemiBold)
+            Text("Lanjut ke Energi", fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -627,7 +634,7 @@ private fun EnergyStep(
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, CheckInColors.Outline)
             ) {
-                Text("← Kembali", color = CheckInColors.Primary)
+                Text("Kembali", color = CheckInColors.Primary)
             }
             Button(
                 onClick = onNext,
@@ -637,7 +644,7 @@ private fun EnergyStep(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
             ) {
-                Text("Lanjut ke Tidur →", fontWeight = FontWeight.SemiBold)
+                Text("Lanjut ke Tidur", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -803,7 +810,7 @@ private fun SleepStep(
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, CheckInColors.Outline)
             ) {
-                Text("← Kembali", color = CheckInColors.Primary)
+                Text("Kembali", color = CheckInColors.Primary)
             }
             Button(
                 onClick = onNext,
@@ -813,7 +820,7 @@ private fun SleepStep(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
             ) {
-                Text("Lanjut ke Catatan →", fontWeight = FontWeight.SemiBold)
+                Text("Lanjut ke Catatan", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -878,7 +885,7 @@ private fun NoteStep(
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, CheckInColors.Outline)
             ) {
-                Text("← Kembali", color = CheckInColors.Primary)
+                Text("Kembali", color = CheckInColors.Primary)
             }
             Button(
                 onClick = onSave,
