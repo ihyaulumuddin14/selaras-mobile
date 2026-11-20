@@ -245,133 +245,120 @@ fun OnboardingCarouselContent(
                 )
             }
 
-            if (!state.isLastSlide) {
-                TextButton(onClick = onSkip) {
-                    Text(
-                        text = "Lewati",
-                        color = OnboardingColors.TextSecondary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            } else {
-                Spacer(Modifier.width(1.dp))
-            }
-        }
+            Spacer(Modifier.weight(0.8f))
 
-        Spacer(Modifier.weight(0.8f))
-
-        // Slide Visual Emblem Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(240.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
-            border = BorderStroke(1.dp, OnboardingColors.CardBorder),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+            // Slide Visual Emblem Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(240.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
+                border = BorderStroke(1.dp, OnboardingColors.CardBorder),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Surface(
-                    modifier = Modifier.size(110.dp),
-                    shape = CircleShape,
-                    color = OnboardingColors.PrimaryContainer
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = currentSlide.iconDescription,
-                            fontSize = 52.sp
-                        )
+                    Surface(
+                        modifier = Modifier.size(110.dp),
+                        shape = CircleShape,
+                        color = OnboardingColors.PrimaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = currentSlide.iconDescription,
+                                fontSize = 52.sp
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(32.dp))
 
-        // Headline & Description
-        Text(
-            text = currentSlide.title,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = OnboardingColors.TextPrimary,
-            lineHeight = 32.sp
-        )
+            // Headline & Description
+            Text(
+                text = currentSlide.title,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = OnboardingColors.TextPrimary,
+                lineHeight = 32.sp
+            )
 
-        Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
-        Text(
-            text = currentSlide.subtitle,
-            fontSize = 15.sp,
-            color = OnboardingColors.TextSecondary,
-            lineHeight = 22.sp
-        )
+            Text(
+                text = currentSlide.subtitle,
+                fontSize = 15.sp,
+                color = OnboardingColors.TextSecondary,
+                lineHeight = 22.sp
+            )
 
-        Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
 
-        // Pagination Dots Indicator
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            for (i in 0 until state.totalSlides) {
-                val isSelected = i == state.carouselIndex
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .height(8.dp)
-                        .width(if (isSelected) 24.dp else 8.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isSelected) OnboardingColors.Primary
-                            else OnboardingColors.Outline.copy(alpha = 0.3f)
-                        )
-                        .clickable { onDotClick(i) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(28.dp))
-
-        // Navigation Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (state.carouselIndex > 0) {
-                OutlinedButton(
-                    onClick = onPrev,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, OnboardingColors.Outline)
-                ) {
-                    Text(
-                        text = "Kembali",
-                        color = OnboardingColors.Primary,
-                        fontWeight = FontWeight.SemiBold
+            // Pagination Dots Indicator
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (i in 0 until state.totalSlides) {
+                    val isSelected = i == state.carouselIndex
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .height(8.dp)
+                            .width(if (isSelected) 24.dp else 8.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) OnboardingColors.Primary
+                                else OnboardingColors.Outline.copy(alpha = 0.3f)
+                            )
+                            .clickable { onDotClick(i) }
                     )
                 }
             }
 
-            Button(
-                onClick = onNext,
-                modifier = Modifier
-                    .weight(if (state.carouselIndex > 0) 1f else 2f)
-                    .height(50.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
+            Spacer(Modifier.height(28.dp))
+
+            // Navigation Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = if (state.isLastSlide) "Selesai" else "Lanjut",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp
-                )
+                if (state.carouselIndex > 0) {
+                    OutlinedButton(
+                        onClick = onPrev,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, OnboardingColors.Outline)
+                    ) {
+                        Text(
+                            text = "Kembali",
+                            color = OnboardingColors.Primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onNext,
+                    modifier = Modifier
+                        .weight(if (state.carouselIndex > 0) 1f else 2f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
+                ) {
+                    Text(
+                        text = if (state.isLastSlide) "Selesai" else "Lanjut",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                }
             }
         }
     }
@@ -379,166 +366,166 @@ fun OnboardingCarouselContent(
 
 @Composable
 fun InformedConsentContent(
-    state: OnboardingUiState,
-    onConsentChange: (Boolean) -> Unit,
-    onSubmitConsent: () -> Unit,
-    onBackToCarousel: () -> Unit
-) {
-    val scrollState = rememberScrollState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp)
+        state: OnboardingUiState,
+        onConsentChange: (Boolean) -> Unit,
+        onSubmitConsent: () -> Unit,
+        onBackToCarousel: () -> Unit
     ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(role = Role.Button, onClick = onBackToCarousel),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Kembali",
-                    tint = OnboardingColors.Primary
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Privasi & Persetujuan",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = OnboardingColors.TextPrimary
-            )
-        }
+        val scrollState = rememberScrollState()
 
-        Text(
-            text = "Ketahui batasan layanan dan bagaimana Selaras melindungi ruang aman Anda.",
-            fontSize = 14.sp,
-            color = OnboardingColors.TextSecondary,
-            lineHeight = 20.sp
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        // Error message if any
-        if (state.errorMessage != null) {
-            Surface(
-                color = OnboardingColors.Error.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                Text(
-                    text = state.errorMessage,
-                    color = OnboardingColors.Error,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(12.dp)
-                )
-            }
-        }
-
-        // Scrollable Consent Clauses
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(scrollState)
+                .fillMaxSize()
+                .padding(20.dp)
         ) {
-            ConsentClauseCard(
-                icon = "⚕️",
-                title = "Bukan Alat Diagnosis Medis",
-                content = "Selaras adalah sarana refleksi mandiri (*self-care companion*) dan penapisan awal. Selaras BUKAN pengganti diagnosis medis, pemeriksaan psikiatri, atau sesi psikoterapi formal dari tenaga kesehatan profesional berlisensi."
-            )
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable(role = Role.Button, onClick = onBackToCarousel),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Kembali",
+                        tint = OnboardingColors.Primary
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Privasi & Persetujuan",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = OnboardingColors.TextPrimary
+                )
+            }
 
-            Spacer(Modifier.height(12.dp))
-
-            ConsentClauseCard(
-                icon = "🔒",
-                title = "Kedaulatan Privasi & Enkripsi Lokal",
-                content = "Seluruh catatan suasana hati harian, durasi tidur, dan hasil penapisan depresi PHQ-9 Anda disimpan secara lokal pada perangkat dan dienkripsi penuh menggunakan AES-256 (SQLCipher). Data Anda tidak dijual kepada pihak ketiga."
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            ConsentClauseCard(
-                icon = "🆘",
-                title = "Bantuan Krisis & Kontak Darurat",
-                content = "Jika Anda mengalami krisis psikologis hebat atau memiliki dorongan untuk menyakiti diri sendiri, segera hubungi Layanan Darurat Kesehatan Jiwa Kemenkes (Hotline 119 ext 8) atau segera kunjungi instalasi gawat darurat rumah sakit terdekat."
+            Text(
+                text = "Ketahui batasan layanan dan bagaimana Selaras melindungi ruang aman Anda.",
+                fontSize = 14.sp,
+                color = OnboardingColors.TextSecondary,
+                lineHeight = 20.sp
             )
 
             Spacer(Modifier.height(16.dp))
-        }
 
-        Spacer(Modifier.height(12.dp))
+            // Error message if any
+            if (state.errorMessage != null) {
+                Surface(
+                    color = OnboardingColors.Error.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Text(
+                        text = state.errorMessage,
+                        color = OnboardingColors.Error,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
 
-        // Checkbox Agreement Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onConsentChange(!state.isConsentChecked) }
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = state.isConsentChecked,
-                onCheckedChange = onConsentChange,
-                colors = CheckboxDefaults.colors(
-                    checkedColor = OnboardingColors.Primary,
-                    checkmarkColor = Color.White
+            // Scrollable Consent Clauses
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(scrollState)
+            ) {
+                ConsentClauseCard(
+                    icon = "⚕️",
+                    title = "Bukan Alat Diagnosis Medis",
+                    content = "Selaras adalah sarana refleksi mandiri (*self-care companion*) dan penapisan awal. Selaras BUKAN pengganti diagnosis medis, pemeriksaan psikiatri, atau sesi psikoterapi formal dari tenaga kesehatan profesional berlisensi."
                 )
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Saya telah membaca, memahami, dan menyetujui seluruh ketentuan di atas.",
-                fontSize = 13.sp,
-                color = OnboardingColors.TextPrimary,
-                lineHeight = 18.sp
-            )
-        }
 
-        Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
 
-        // Submit Button
-        Button(
-            onClick = onSubmitConsent,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            enabled = state.isConsentChecked && !state.isLoading,
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = OnboardingColors.Primary,
-                disabledContainerColor = OnboardingColors.Outline.copy(alpha = 0.2f)
-            )
-        ) {
-            if (state.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp
+                ConsentClauseCard(
+                    icon = "🔒",
+                    title = "Kedaulatan Privasi & Enkripsi Lokal",
+                    content = "Seluruh catatan suasana hati harian, durasi tidur, dan hasil penapisan depresi PHQ-9 Anda disimpan secara lokal pada perangkat dan dienkripsi penuh menggunakan AES-256 (SQLCipher). Data Anda tidak dijual kepada pihak ketiga."
                 )
-            } else {
+
+                Spacer(Modifier.height(12.dp))
+
+                ConsentClauseCard(
+                    icon = "🆘",
+                    title = "Bantuan Krisis & Kontak Darurat",
+                    content = "Jika Anda mengalami krisis psikologis hebat atau memiliki dorongan untuk menyakiti diri sendiri, segera hubungi Layanan Darurat Kesehatan Jiwa Kemenkes (Hotline 119 ext 8) atau segera kunjungi instalasi gawat darurat rumah sakit terdekat."
+                )
+
+                Spacer(Modifier.height(16.dp))
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Checkbox Agreement Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onConsentChange(!state.isConsentChecked) }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = state.isConsentChecked,
+                    onCheckedChange = onConsentChange,
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = OnboardingColors.Primary,
+                        checkmarkColor = Color.White
+                    )
+                )
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Saya Setuju & Lanjutkan",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    text = "Saya telah membaca, memahami, dan menyetujui seluruh ketentuan di atas.",
+                    fontSize = 13.sp,
+                    color = OnboardingColors.TextPrimary,
+                    lineHeight = 18.sp
                 )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Submit Button
+            Button(
+                onClick = onSubmitConsent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                enabled = state.isConsentChecked && !state.isLoading,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = OnboardingColors.Primary,
+                    disabledContainerColor = OnboardingColors.Outline.copy(alpha = 0.2f)
+                )
+            ) {
+                if (state.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "Saya Setuju & Lanjutkan",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
             }
         }
     }
-}
 
 @Composable
 private fun ConsentClauseCard(
-    icon: String,
+    icon: String = "⚕️",
     title: String,
     content: String
 ) {
