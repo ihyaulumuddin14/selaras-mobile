@@ -82,10 +82,14 @@ class OnboardingViewModel(
         )
     )
 
-    fun checkAppLaunchState(splashDelayMs: Long = 1000L): Job {
+    fun checkAppLaunchState(splashDelayMs: Long = 1000L, forceOnboarding: Boolean = false): Job {
         return viewModelScope.launch {
             if (splashDelayMs > 0) {
                 delay(splashDelayMs)
+            }
+            if (forceOnboarding) {
+                _uiState.update { it.copy(currentDestination = OnboardingDestination.ONBOARDING_CAROUSEL) }
+                return@launch
             }
             val settings = initializeAppSettingsUseCase().getOrNull()
             if (settings != null && settings.onboardingCompleted && settings.isConsentAccepted) {
@@ -99,6 +103,19 @@ class OnboardingViewModel(
             } else {
                 _uiState.update { it.copy(currentDestination = OnboardingDestination.ONBOARDING_CAROUSEL) }
             }
+        }
+    }
+
+    fun restartForTesting() {
+        _uiState.update {
+            it.copy(
+                currentDestination = OnboardingDestination.SPLASH,
+                carouselIndex = 0,
+                isConsentChecked = false,
+                isConsentAccepted = false,
+                isLoading = false,
+                errorMessage = null
+            )
         }
     }
 
@@ -130,6 +147,15 @@ class OnboardingViewModel(
 
     private fun proceedToConsent() {
         _uiState.update { it.copy(currentDestination = OnboardingDestination.INFORMED_CONSENT) }
+    }
+
+    fun backToCarousel() {
+        _uiState.update {
+            it.copy(
+                currentDestination = OnboardingDestination.ONBOARDING_CAROUSEL,
+                carouselIndex = it.totalSlides - 1
+            )
+        }
     }
 
     fun setConsentChecked(checked: Boolean) {

@@ -1,5 +1,6 @@
 package com.example.selaras.features.onboarding
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,8 +45,9 @@ internal object OnboardingColors {
 @Composable
 fun OnboardingScreen(
     viewModel: OnboardingViewModel,
-    onNavigateToDashboard: () -> Unit,
-    onNavigateToAppLock: () -> Unit
+    forceShowOnboarding: Boolean = false,
+    onNavigateToDashboard: () -> Unit = {},
+    onNavigateToAppLock: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
 
@@ -64,10 +68,15 @@ fun OnboardingScreen(
         when (state.currentDestination) {
             OnboardingDestination.SPLASH -> {
                 SplashScreen(
-                    onCheckLaunchState = { viewModel.checkAppLaunchState() }
+                    onCheckLaunchState = {
+                        viewModel.checkAppLaunchState(forceOnboarding = forceShowOnboarding)
+                    }
                 )
             }
             OnboardingDestination.ONBOARDING_CAROUSEL -> {
+                BackHandler(enabled = state.carouselIndex > 0) {
+                    viewModel.prevSlide()
+                }
                 OnboardingCarouselContent(
                     state = state,
                     slides = viewModel.slides,
@@ -78,21 +87,64 @@ fun OnboardingScreen(
                 )
             }
             OnboardingDestination.INFORMED_CONSENT -> {
+                BackHandler {
+                    viewModel.backToCarousel()
+                }
                 InformedConsentContent(
                     state = state,
                     onConsentChange = viewModel::setConsentChecked,
                     onSubmitConsent = { viewModel.submitConsentAndComplete() },
-                    onBackToCarousel = viewModel::prevSlide
+                    onBackToCarousel = viewModel::backToCarousel
                 )
             }
             OnboardingDestination.NAVIGATE_TO_DASHBOARD,
             OnboardingDestination.NAVIGATE_TO_APP_LOCK -> {
-                // Navigating away, show subtle loader
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = OnboardingColors.Primary)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
+                        border = BorderStroke(1.dp, OnboardingColors.CardBorder)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("🌿", fontSize = 48.sp)
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = "Orientasi & Persetujuan Selesai!",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = OnboardingColors.TextPrimary,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Status informed consent telah berhasil disimpan ke database lokal terenkripsi.",
+                                fontSize = 14.sp,
+                                color = OnboardingColors.TextSecondary,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 20.sp
+                            )
+                            Spacer(Modifier.height(24.dp))
+                            Button(
+                                onClick = { viewModel.restartForTesting() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
+                            ) {
+                                Text("Ulangi Tes Splash & Onboarding", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -316,7 +368,7 @@ fun OnboardingCarouselContent(
                 colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
             ) {
                 Text(
-                    text = if (state.isLastSlide) "Lanjut ke Persetujuan" else "Lanjut",
+                    text = if (state.isLastSlide) "Selesai" else "Lanjut",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp
                 )
@@ -352,7 +404,11 @@ fun InformedConsentContent(
                     .clickable(role = Role.Button, onClick = onBackToCarousel),
                 contentAlignment = Alignment.Center
             ) {
-                Text("←", fontSize = 22.sp, color = OnboardingColors.Primary)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint = OnboardingColors.Primary
+                )
             }
             Spacer(Modifier.width(8.dp))
             Text(

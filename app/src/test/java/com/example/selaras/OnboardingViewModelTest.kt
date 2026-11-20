@@ -124,6 +124,10 @@ class OnboardingViewModelTest {
 
         viewModel.skipToConsent()
         assertEquals(OnboardingDestination.INFORMED_CONSENT, viewModel.uiState.value.currentDestination)
+
+        viewModel.backToCarousel()
+        assertEquals(OnboardingDestination.ONBOARDING_CAROUSEL, viewModel.uiState.value.currentDestination)
+        assertEquals(viewModel.uiState.value.totalSlides - 1, viewModel.uiState.value.carouselIndex)
     }
 
     @Test
