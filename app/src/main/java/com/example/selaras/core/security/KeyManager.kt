@@ -21,7 +21,7 @@ import javax.crypto.spec.GCMParameterSpec
  * 3. DEK is encrypted using KEK before being persisted to private application storage.
  * 4. User PIN is NEVER used as the DEK.
  */
-class KeyManager(
+open class KeyManager(
     private val context: Context,
     private val keyStoreProvider: String = ANDROID_KEYSTORE_PROVIDER
 ) {
@@ -33,7 +33,7 @@ class KeyManager(
      * Retrieves the existing DEK or generates a new one protected by the Keystore.
      */
     @Synchronized
-    fun getOrCreateDatabaseKey(): ByteArray {
+    open fun getOrCreateDatabaseKey(): ByteArray {
         val encryptedDekBase64 = prefs.getString(KEY_ENCRYPTED_DEK, null)
         val ivBase64 = prefs.getString(KEY_IV, null)
 
@@ -52,7 +52,7 @@ class KeyManager(
      * Stores or updates the DEK protected by Keystore KEK.
      */
     @Synchronized
-    fun saveDekProtected(dek: ByteArray) {
+    open fun saveDekProtected(dek: ByteArray) {
         val kek = getOrCreateKek()
         val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, kek)
@@ -68,7 +68,7 @@ class KeyManager(
     /**
      * Checks whether an encrypted DEK already exists in storage.
      */
-    fun hasDatabaseKey(): Boolean {
+    open fun hasDatabaseKey(): Boolean {
         return prefs.contains(KEY_ENCRYPTED_DEK) && prefs.contains(KEY_IV)
     }
 

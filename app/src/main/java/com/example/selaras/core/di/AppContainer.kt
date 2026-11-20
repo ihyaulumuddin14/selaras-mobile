@@ -12,11 +12,13 @@ import com.example.selaras.data.datasource.remote.FakeCheckInRemoteDataSource
 import com.example.selaras.data.repository.BreathingRepositoryImpl
 import com.example.selaras.data.repository.CheckInRepositoryImpl
 import com.example.selaras.data.repository.ScreeningRepositoryImpl
+import com.example.selaras.data.repository.SecurityRepositoryImpl
 import com.example.selaras.data.sync.BreathingSyncManager
 import com.example.selaras.data.sync.CheckInSyncManager
 import com.example.selaras.domain.repository.BreathingRepository
 import com.example.selaras.domain.repository.CheckInRepository
 import com.example.selaras.domain.repository.ScreeningRepository
+import com.example.selaras.domain.repository.SecurityRepository
 
 /**
  * Manual Dependency Injection container (ADR-011).
@@ -26,6 +28,7 @@ interface AppContainer {
     val keyManager: KeyManager
     val pinManager: PinManager
     val recoveryManager: RecoveryManager
+    val securityRepository: SecurityRepository
     val breathingRepository: BreathingRepository
     val checkInRepository: CheckInRepository
     val screeningRepository: ScreeningRepository
@@ -46,6 +49,14 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val recoveryManager: RecoveryManager by lazy {
         RecoveryManager(appContext)
+    }
+
+    override val securityRepository: SecurityRepository by lazy {
+        SecurityRepositoryImpl(
+            pinManager = pinManager,
+            recoveryManager = recoveryManager,
+            keyManager = keyManager
+        )
     }
 
     override val database: SelarasDatabase by lazy {
