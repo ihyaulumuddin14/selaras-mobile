@@ -7,10 +7,12 @@ import com.example.selaras.core.security.PinManager
 import com.example.selaras.core.security.RecoveryManager
 import com.example.selaras.data.datasource.local.BreathingLocalDataSource
 import com.example.selaras.data.datasource.local.CheckInLocalDataSource
+import com.example.selaras.data.datasource.remote.FakeBreathingRemoteDataSource
 import com.example.selaras.data.datasource.remote.FakeCheckInRemoteDataSource
 import com.example.selaras.data.repository.BreathingRepositoryImpl
 import com.example.selaras.data.repository.CheckInRepositoryImpl
 import com.example.selaras.data.repository.ScreeningRepositoryImpl
+import com.example.selaras.data.sync.BreathingSyncManager
 import com.example.selaras.data.sync.CheckInSyncManager
 import com.example.selaras.domain.repository.BreathingRepository
 import com.example.selaras.domain.repository.CheckInRepository
@@ -28,6 +30,7 @@ interface AppContainer {
     val checkInRepository: CheckInRepository
     val screeningRepository: ScreeningRepository
     val checkInSyncManager: CheckInSyncManager
+    val breathingSyncManager: BreathingSyncManager
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -75,5 +78,11 @@ class DefaultAppContainer(context: Context) : AppContainer {
         val localDataSource = CheckInLocalDataSource(database.checkInDao())
         val remoteDataSource = FakeCheckInRemoteDataSource()
         CheckInSyncManager(localDataSource, remoteDataSource)
+    }
+
+    override val breathingSyncManager: BreathingSyncManager by lazy {
+        val localDataSource = BreathingLocalDataSource(database.customBreathingPatternDao())
+        val remoteDataSource = FakeBreathingRemoteDataSource()
+        BreathingSyncManager(localDataSource, remoteDataSource)
     }
 }
