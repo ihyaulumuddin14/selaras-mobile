@@ -1,5 +1,6 @@
 package com.example.selaras.features.checkin
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,6 +64,16 @@ fun CheckInScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    BackHandler {
+        if (state.isEditingToday) {
+            viewModel.cancelEditToday()
+        } else if (state.currentTab != CheckInTab.TODAY) {
+            viewModel.setTab(CheckInTab.TODAY)
+        } else {
+            onBack()
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = CheckInColors.Background
@@ -70,8 +81,13 @@ fun CheckInScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
             SelarasHeader(
-                title = "Check-in Harian",
-                onBack = onBack
+                title = if (state.isEditingToday) "Ubah Check-in Hari Ini" else "Check-in Harian",
+                onBack = {
+                    if (state.isEditingToday) {
+                        viewModel.cancelEditToday()
+                    }
+                    onBack()
+                }
             )
 
             // Navigation Tabs

@@ -39,7 +39,9 @@ fun DashboardScreen(
     onNavigateToCounselorSummary: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToHelp: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToEditCheckIn: () -> Unit = onNavigateToCheckIn,
+    onNavigateToWeeklyAnalysis: () -> Unit = onNavigateToCheckIn
 ) {
     val state by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
@@ -77,7 +79,8 @@ fun DashboardScreen(
             TodayCheckInCard(
                 todayCheckIn = state.todayCheckIn,
                 onStartCheckIn = onNavigateToCheckIn,
-                onViewWeeklyAnalysis = onNavigateToCheckIn,
+                onEditCheckIn = onNavigateToEditCheckIn,
+                onViewWeeklyAnalysis = onNavigateToWeeklyAnalysis,
                 isPulsing = state.shouldPulseCheckInCard
             )
 

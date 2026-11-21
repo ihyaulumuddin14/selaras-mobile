@@ -163,7 +163,18 @@ fun AppNavigation(
                                 NavTab.HOME -> {
                                     DashboardScreen(
                                         viewModel = dashboardViewModel,
-                                        onNavigateToCheckIn = { currentTab = NavTab.CHECK_IN },
+                                        onNavigateToCheckIn = {
+                                            checkInViewModel.navigateToNewCheckIn()
+                                            currentTab = NavTab.CHECK_IN
+                                        },
+                                        onNavigateToEditCheckIn = {
+                                            checkInViewModel.startEditToday()
+                                            currentTab = NavTab.CHECK_IN
+                                        },
+                                        onNavigateToWeeklyAnalysis = {
+                                            checkInViewModel.navigateToWeeklyAnalysis()
+                                            currentTab = NavTab.CHECK_IN
+                                        },
                                         onNavigateToBreathing = { subDestination = SubDestination.BREATHING },
                                         onNavigateToScreening = { currentTab = NavTab.SCREENING },
                                         onNavigateToCounselorSummary = { subDestination = SubDestination.COUNSELOR_SUMMARY },

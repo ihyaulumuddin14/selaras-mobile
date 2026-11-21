@@ -53,7 +53,8 @@ fun TodayCheckInCard(
     onStartCheckIn: () -> Unit,
     onViewWeeklyAnalysis: () -> Unit,
     modifier: Modifier = Modifier,
-    isPulsing: Boolean = false
+    isPulsing: Boolean = false,
+    onEditCheckIn: () -> Unit = onStartCheckIn
 ) {
     val surfaceWhite = Color(0xFFFFFFFF)
     val cardBorder = Color(0xFFE2E8E3)
@@ -283,7 +284,7 @@ fun TodayCheckInCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
-                    onClick = onStartCheckIn,
+                    onClick = onEditCheckIn,
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier
                         .weight(1f)

@@ -140,4 +140,25 @@ class CheckInViewModelTest {
         assertEquals(4, viewModel.uiState.value.todayCheckIn?.mood)
         assertEquals(7, viewModel.uiState.value.todayCheckIn?.energy)
     }
+
+    @Test
+    fun testNavigateToWeeklyAnalysisSetsTabAndClearsEdit() {
+        viewModel.startEditToday()
+        viewModel.navigateToWeeklyAnalysis()
+
+        val state = viewModel.uiState.value
+        assertEquals(CheckInTab.WEEKLY_ANALYSIS, state.currentTab)
+        assertFalse(state.isEditingToday)
+    }
+
+    @Test
+    fun testNavigateToNewCheckInResetsWizardState() {
+        viewModel.setTab(CheckInTab.WEEKLY_ANALYSIS)
+        viewModel.navigateToNewCheckIn()
+
+        val state = viewModel.uiState.value
+        assertEquals(CheckInTab.TODAY, state.currentTab)
+        assertEquals(CheckInStep.MOOD, state.currentStep)
+        assertFalse(state.isEditingToday)
+    }
 }
