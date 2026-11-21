@@ -11,7 +11,10 @@ enum class AppLockMode {
     UNLOCK,
 
     /** Emergency recovery when user forgot PIN: Input Recovery Code -> Create New PIN -> Confirm -> Success */
-    RESET
+    RESET,
+
+    /** Changing PIN: Enter Current PIN (with Forgot PIN option) -> Create New PIN -> Confirm -> Success */
+    CHANGE_PIN
 }
 
 /**
@@ -21,7 +24,10 @@ enum class PinStep {
     /** Inputting 6-digit PIN to unlock */
     ENTER_PIN,
 
-    /** Inputting initial 6-digit PIN during setup or reset */
+    /** Inputting current 6-digit PIN when changing PIN */
+    ENTER_CURRENT_PIN,
+
+    /** Inputting initial 6-digit PIN during setup, reset, or changing PIN */
     ENTER_NEW_PIN,
 
     /** Re-entering 6-digit PIN to confirm matching */
@@ -39,7 +45,7 @@ enum class PinStep {
     /** Setup successfully completed */
     SETUP_COMPLETED,
 
-    /** PIN successfully reset via recovery code */
+    /** PIN successfully reset or updated */
     RESET_SUCCESS
 }
 
@@ -48,9 +54,11 @@ enum class PinStep {
  */
 data class AppLockUiState(
     val mode: AppLockMode = AppLockMode.UNLOCK,
+    val previousMode: AppLockMode? = null,
     val pinStep: PinStep = PinStep.ENTER_PIN,
     val inputPin: String = "",
     val firstEnteredPin: String = "",
+    val verifiedCurrentPin: String = "",
     val recoveryCode: String = "",
     val inputRecoveryCode: String = "",
     val isRecoverySavedChecked: Boolean = false,

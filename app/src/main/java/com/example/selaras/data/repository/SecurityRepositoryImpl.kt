@@ -78,6 +78,27 @@ class SecurityRepositoryImpl(
         }
     }
 
+    override fun changePin(currentPin: String, newPin: String): Result<Unit> {
+        return try {
+            if (currentPin.length != 6 || !currentPin.all { it.isDigit() }) {
+                return Result.failure(IllegalArgumentException("PIN saat ini harus berupa 6 digit angka"))
+            }
+            if (newPin.length != 6 || !newPin.all { it.isDigit() }) {
+                return Result.failure(IllegalArgumentException("PIN baru harus berupa 6 digit angka"))
+            }
+            if (!verifyPin(currentPin)) {
+                return Result.failure(IllegalArgumentException("PIN saat ini salah"))
+            }
+            val pinUpdated = pinManager.setPin(newPin)
+            if (!pinUpdated) {
+                return Result.failure(IllegalStateException("Gagal memperbarui PIN"))
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override fun clearSecurity(): Result<Unit> {
         return try {
             pinManager.clearPin()

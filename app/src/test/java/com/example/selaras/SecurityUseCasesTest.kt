@@ -1,6 +1,7 @@
 package com.example.selaras
 
 import com.example.selaras.domain.repository.SecurityRepository
+import com.example.selaras.domain.usecase.security.ChangePinUseCase
 import com.example.selaras.domain.usecase.security.CheckAppLockStatusUseCase
 import com.example.selaras.domain.usecase.security.ResetPinWithRecoveryUseCase
 import com.example.selaras.domain.usecase.security.SetupPinAndRecoveryUseCase
@@ -42,6 +43,17 @@ class FakeSecurityRepository : SecurityRepository {
         return Result.success(Unit)
     }
 
+    override fun changePin(currentPin: String, newPin: String): Result<Unit> {
+        if (!verifyPin(currentPin)) {
+            return Result.failure(IllegalArgumentException("PIN saat ini salah"))
+        }
+        if (newPin.length != 6 || !newPin.all { it.isDigit() }) {
+            return Result.failure(IllegalArgumentException("PIN baru harus berupa 6 digit angka"))
+        }
+        storedPin = newPin
+        return Result.success(Unit)
+    }
+
     override fun clearSecurity(): Result<Unit> {
         storedPin = null
         storedRecoveryCode = null
@@ -57,6 +69,7 @@ class SecurityUseCasesTest {
     private lateinit var verifyRecoveryCodeUseCase: VerifyRecoveryCodeUseCase
     private lateinit var resetPinUseCase: ResetPinWithRecoveryUseCase
     private lateinit var checkAppLockStatusUseCase: CheckAppLockStatusUseCase
+    private lateinit var changePinUseCase: ChangePinUseCase
 
     @Before
     fun setUp() {
@@ -66,6 +79,7 @@ class SecurityUseCasesTest {
         verifyRecoveryCodeUseCase = VerifyRecoveryCodeUseCase(fakeRepository)
         resetPinUseCase = ResetPinWithRecoveryUseCase(fakeRepository)
         checkAppLockStatusUseCase = CheckAppLockStatusUseCase(fakeRepository)
+        changePinUseCase = ChangePinUseCase(fakeRepository)
     }
 
     @Test
@@ -129,5 +143,28 @@ class SecurityUseCasesTest {
         assertTrue(successResult.isSuccess)
         assertTrue(verifyPinUseCase("654321"))
         assertFalse(verifyPinUseCase("123456"))
+    }
+
+    @Test
+    fun testChangePinUseCaseValidation() {
+        setupPinUseCase("112233")
+
+        // Invalid current PIN fails
+        val wrongCurrentResult = changePinUseCase("999999", "445566")
+        assertTrue(wrongCurrentResult.isFailure)
+
+        // Invalid length fails
+        val shortNewPinResult = changePinUseCase("112233", "123")
+        assertTrue(shortNewPinResult.isFailure)
+
+        // Non-digit new PIN fails
+        val nonDigitResult = changePinUseCase("112233", "abcdef")
+        assertTrue(nonDigitResult.isFailure)
+
+        // Valid change
+        val successResult = changePinUseCase("112233", "445566")
+        assertTrue(successResult.isSuccess)
+        assertTrue(verifyPinUseCase("445566"))
+        assertFalse(verifyPinUseCase("112233"))
     }
 }

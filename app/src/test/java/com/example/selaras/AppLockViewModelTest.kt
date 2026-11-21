@@ -217,4 +217,90 @@ class AppLockViewModelTest {
         assertEquals(PinStep.ENTER_NEW_PIN, viewModel.uiState.value.pinStep)
         assertEquals("", viewModel.uiState.value.inputPin)
     }
+
+    @Test
+    fun testChangePinFlowSuccess() = runTest {
+        fakeRepository.storedPin = "112233"
+        viewModel = createViewModel(AppLockMode.CHANGE_PIN)
+
+        // 1. Initial state is ENTER_CURRENT_PIN
+        val state = viewModel.uiState.value
+        assertEquals(AppLockMode.CHANGE_PIN, state.mode)
+        assertEquals(PinStep.ENTER_CURRENT_PIN, state.pinStep)
+
+        // 2. Input wrong current PIN
+        listOf(9, 9, 9, 9, 9, 9).forEach { viewModel.onDigitPressed(it) }
+        assertTrue(viewModel.uiState.value.isError)
+        assertEquals("PIN saat ini salah. Coba lagi", viewModel.uiState.value.errorMessage)
+        assertEquals(PinStep.ENTER_CURRENT_PIN, viewModel.uiState.value.pinStep)
+
+        // 3. Input correct current PIN
+        listOf(1, 1, 2, 2, 3, 3).forEach { viewModel.onDigitPressed(it) }
+        assertFalse(viewModel.uiState.value.isError)
+        assertEquals(PinStep.ENTER_NEW_PIN, viewModel.uiState.value.pinStep)
+        assertEquals("112233", viewModel.uiState.value.verifiedCurrentPin)
+
+        // 4. Enter new PIN
+        listOf(6, 5, 4, 3, 2, 1).forEach { viewModel.onDigitPressed(it) }
+        assertEquals(PinStep.CONFIRM_NEW_PIN, viewModel.uiState.value.pinStep)
+        assertEquals("654321", viewModel.uiState.value.firstEnteredPin)
+
+        // 5. Confirm matching new PIN
+        listOf(6, 5, 4, 3, 2, 1).forEach { viewModel.onDigitPressed(it) }
+        advanceUntilIdle()
+
+        // 6. Successfully updated
+        assertEquals(PinStep.RESET_SUCCESS, viewModel.uiState.value.pinStep)
+        assertEquals("654321", fakeRepository.storedPin)
+    }
+
+    @Test
+    fun testChangePinForgotPasswordRecoveryAndCancel() = runTest {
+        fakeRepository.storedPin = "112233"
+        fakeRepository.storedRecoveryCode = "ABCD-EFGH-JKLM-NPQR"
+        viewModel = createViewModel(AppLockMode.CHANGE_PIN)
+
+        // User is at ENTER_CURRENT_PIN, clicks "Lupa PIN?"
+        viewModel.switchToRecoveryMode()
+        assertEquals(AppLockMode.RESET, viewModel.uiState.value.mode)
+        assertEquals(PinStep.ENTER_RECOVERY_CODE, viewModel.uiState.value.pinStep)
+        assertEquals(AppLockMode.CHANGE_PIN, viewModel.uiState.value.previousMode)
+
+        // Cancel returns to CHANGE_PIN mode
+        viewModel.onCancelRecovery()
+        assertEquals(AppLockMode.CHANGE_PIN, viewModel.uiState.value.mode)
+        assertEquals(PinStep.ENTER_CURRENT_PIN, viewModel.uiState.value.pinStep)
+
+        // Click "Lupa PIN?" again and complete recovery
+        viewModel.switchToRecoveryMode()
+        viewModel.onRecoveryCodeInputChanged("ABCD-EFGH-JKLM-NPQR")
+        viewModel.verifyEnteredRecoveryCode()
+        assertEquals(PinStep.ENTER_NEW_PIN, viewModel.uiState.value.pinStep)
+
+        listOf(7, 7, 8, 8, 9, 9).forEach { viewModel.onDigitPressed(it) }
+        assertEquals(PinStep.CONFIRM_NEW_PIN, viewModel.uiState.value.pinStep)
+
+        listOf(7, 7, 8, 8, 9, 9).forEach { viewModel.onDigitPressed(it) }
+        advanceUntilIdle()
+
+        assertEquals(PinStep.RESET_SUCCESS, viewModel.uiState.value.pinStep)
+        assertEquals("778899", fakeRepository.storedPin)
+    }
+
+    @Test
+    fun testChangePinHandleBack() {
+        fakeRepository.storedPin = "112233"
+        viewModel = createViewModel(AppLockMode.CHANGE_PIN)
+
+        // At ENTER_CURRENT_PIN: not consumed internally -> false (exits to Settings)
+        assertFalse(viewModel.handleBack())
+
+        // Move to ENTER_NEW_PIN
+        listOf(1, 1, 2, 2, 3, 3).forEach { viewModel.onDigitPressed(it) }
+        assertEquals(PinStep.ENTER_NEW_PIN, viewModel.uiState.value.pinStep)
+
+        // At ENTER_NEW_PIN: handleBack returns to ENTER_CURRENT_PIN
+        assertTrue(viewModel.handleBack())
+        assertEquals(PinStep.ENTER_CURRENT_PIN, viewModel.uiState.value.pinStep)
+    }
 }

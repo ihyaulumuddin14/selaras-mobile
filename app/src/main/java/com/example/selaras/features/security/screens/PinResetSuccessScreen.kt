@@ -33,7 +33,8 @@ import com.example.selaras.features.security.components.SecurityIcons
 @Composable
 fun PinResetSuccessScreen(
     onContinue: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    buttonText: String = "Kembali ke Beranda"
 ) {
     val background = Color(0xFFF7F7F2)
     val textPrimary = Color(0xFF243B35)
@@ -110,7 +111,7 @@ fun PinResetSuccessScreen(
                     .height(52.dp)
             ) {
                 Text(
-                    text = "Buka Beranda",
+                    text = buttonText,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )

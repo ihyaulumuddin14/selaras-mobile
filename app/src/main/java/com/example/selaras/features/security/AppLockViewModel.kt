@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.selaras.domain.repository.SecurityRepository
+import com.example.selaras.domain.usecase.security.ChangePinUseCase
 import com.example.selaras.domain.usecase.security.CheckAppLockStatusUseCase
 import com.example.selaras.domain.usecase.security.ResetPinWithRecoveryUseCase
 import com.example.selaras.domain.usecase.security.SetupPinAndRecoveryUseCase
@@ -24,6 +25,7 @@ class AppLockViewModel(
     private val resetPinWithRecoveryUseCase: ResetPinWithRecoveryUseCase,
     private val checkAppLockStatusUseCase: CheckAppLockStatusUseCase,
     private val securityRepository: SecurityRepository,
+    private val changePinUseCase: ChangePinUseCase = ChangePinUseCase(securityRepository),
     initialMode: AppLockMode? = null
 ) : ViewModel() {
 
@@ -45,6 +47,10 @@ class AppLockViewModel(
             AppLockMode.RESET -> AppLockUiState(
                 mode = AppLockMode.RESET,
                 pinStep = PinStep.ENTER_RECOVERY_CODE
+            )
+            AppLockMode.CHANGE_PIN -> AppLockUiState(
+                mode = AppLockMode.CHANGE_PIN,
+                pinStep = PinStep.ENTER_CURRENT_PIN
             )
         }
     }
@@ -111,8 +117,32 @@ class AppLockViewModel(
                 }
             }
 
+            PinStep.ENTER_CURRENT_PIN -> {
+                // Change PIN mode: verify current PIN first
+                val isValid = verifyPinUseCase(pin)
+                if (isValid) {
+                    _uiState.update {
+                        it.copy(
+                            verifiedCurrentPin = pin,
+                            inputPin = "",
+                            pinStep = PinStep.ENTER_NEW_PIN,
+                            isError = false,
+                            errorMessage = null
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            inputPin = "",
+                            isError = true,
+                            errorMessage = "PIN saat ini salah. Coba lagi"
+                        )
+                    }
+                }
+            }
+
             PinStep.ENTER_NEW_PIN -> {
-                // Setup or Reset mode initial PIN entry -> advance to confirmation
+                // Setup, Reset, or Change PIN mode initial PIN entry -> advance to confirmation
                 _uiState.update {
                     it.copy(
                         firstEnteredPin = pin,
@@ -128,10 +158,11 @@ class AppLockViewModel(
                 // Confirm matching PIN
                 val firstPin = _uiState.value.firstEnteredPin
                 if (pin == firstPin) {
-                    if (_uiState.value.mode == AppLockMode.SETUP) {
-                        completePinSetup(pin)
-                    } else if (_uiState.value.mode == AppLockMode.RESET) {
-                        completePinReset(pin)
+                    when (_uiState.value.mode) {
+                        AppLockMode.SETUP -> completePinSetup(pin)
+                        AppLockMode.RESET -> completePinReset(pin)
+                        AppLockMode.CHANGE_PIN -> completePinChange(pin)
+                        else -> Unit
                     }
                 } else {
                     // Mismatch: reset back to ENTER_NEW_PIN (Figma 173:2361)
@@ -195,6 +226,41 @@ class AppLockViewModel(
                         it.copy(
                             isLoading = false,
                             inputPin = "",
+                            pinStep = PinStep.RESET_SUCCESS,
+                            isError = false,
+                            errorMessage = null
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            inputPin = "",
+                            firstEnteredPin = "",
+                            pinStep = PinStep.ENTER_NEW_PIN,
+                            isError = true,
+                            errorMessage = error.message ?: "Gagal memperbarui PIN"
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    private fun completePinChange(newPin: String) {
+        val currentPin = _uiState.value.verifiedCurrentPin
+        _uiState.update { it.copy(isLoading = true) }
+        viewModelScope.launch {
+            val result = changePinUseCase(currentPin, newPin)
+            result.fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            inputPin = "",
+                            firstEnteredPin = "",
+                            verifiedCurrentPin = "",
                             pinStep = PinStep.RESET_SUCCESS,
                             isError = false,
                             errorMessage = null
@@ -302,9 +368,11 @@ class AppLockViewModel(
      * Switches to emergency recovery mode when user forgets PIN.
      */
     fun switchToRecoveryMode() {
+        val currentMode = _uiState.value.mode
         _uiState.update {
             it.copy(
                 mode = AppLockMode.RESET,
+                previousMode = if (currentMode != AppLockMode.RESET) currentMode else it.previousMode,
                 pinStep = PinStep.ENTER_RECOVERY_CODE,
                 inputPin = "",
                 firstEnteredPin = "",
@@ -322,6 +390,7 @@ class AppLockViewModel(
         _uiState.update {
             it.copy(
                 mode = AppLockMode.UNLOCK,
+                previousMode = null,
                 pinStep = PinStep.ENTER_PIN,
                 inputPin = "",
                 firstEnteredPin = "",
@@ -338,12 +407,44 @@ class AppLockViewModel(
         _uiState.update {
             it.copy(
                 mode = AppLockMode.SETUP,
+                previousMode = null,
                 pinStep = PinStep.ENTER_NEW_PIN,
                 inputPin = "",
                 firstEnteredPin = "",
                 isError = false,
                 errorMessage = null
             )
+        }
+    }
+
+    /**
+     * Switches to Change PIN mode (from Settings).
+     * Prompts user to verify their current PIN first, with an option to recover if forgotten.
+     */
+    fun switchToChangePinMode() {
+        _uiState.update {
+            it.copy(
+                mode = AppLockMode.CHANGE_PIN,
+                previousMode = null,
+                pinStep = PinStep.ENTER_CURRENT_PIN,
+                inputPin = "",
+                firstEnteredPin = "",
+                verifiedCurrentPin = "",
+                inputRecoveryCode = "",
+                isError = false,
+                errorMessage = null
+            )
+        }
+    }
+
+    /**
+     * Cancels recovery flow and returns to either Change PIN mode or Unlock mode.
+     */
+    fun onCancelRecovery() {
+        if (_uiState.value.previousMode == AppLockMode.CHANGE_PIN) {
+            switchToChangePinMode()
+        } else {
+            switchToUnlockMode()
         }
     }
 
@@ -367,25 +468,31 @@ class AppLockViewModel(
                 true
             }
             PinStep.ENTER_RECOVERY_CODE -> {
-                switchToUnlockMode()
+                onCancelRecovery()
                 true
             }
             PinStep.ENTER_NEW_PIN -> {
-                if (state.mode == AppLockMode.RESET) {
-                    _uiState.update {
-                        it.copy(
-                            pinStep = PinStep.ENTER_RECOVERY_CODE,
-                            inputPin = "",
-                            firstEnteredPin = "",
-                            isError = false,
-                            errorMessage = null
-                        )
+                when (state.mode) {
+                    AppLockMode.RESET -> {
+                        _uiState.update {
+                            it.copy(
+                                pinStep = PinStep.ENTER_RECOVERY_CODE,
+                                inputPin = "",
+                                firstEnteredPin = "",
+                                isError = false,
+                                errorMessage = null
+                            )
+                        }
+                        true
                     }
-                    true
-                } else {
-                    false
+                    AppLockMode.CHANGE_PIN -> {
+                        switchToChangePinMode()
+                        true
+                    }
+                    else -> false
                 }
             }
+            PinStep.ENTER_CURRENT_PIN -> false
             else -> false
         }
     }
@@ -414,6 +521,7 @@ class AppLockViewModel(
             val verifyRecovery = VerifyRecoveryCodeUseCase(securityRepository)
             val resetPin = ResetPinWithRecoveryUseCase(securityRepository)
             val checkStatus = CheckAppLockStatusUseCase(securityRepository)
+            val changePin = ChangePinUseCase(securityRepository)
             @Suppress("UNCHECKED_CAST")
             return AppLockViewModel(
                 setupPinAndRecoveryUseCase = setupPin,
@@ -422,6 +530,7 @@ class AppLockViewModel(
                 resetPinWithRecoveryUseCase = resetPin,
                 checkAppLockStatusUseCase = checkStatus,
                 securityRepository = securityRepository,
+                changePinUseCase = changePin,
                 initialMode = initialMode
             ) as T
         }
