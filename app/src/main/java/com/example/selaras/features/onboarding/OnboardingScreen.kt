@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,11 +30,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.R
 
 internal object OnboardingColors {
     val Primary = Color(0xFF356859)
@@ -150,7 +154,7 @@ fun SplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // App Emblem / Leaf Logo representation
+            // App Logo
             Surface(
                 modifier = Modifier.size(96.dp),
                 shape = CircleShape,
@@ -158,7 +162,11 @@ fun SplashScreen(
                 border = BorderStroke(2.dp, OnboardingColors.Primary.copy(alpha = 0.2f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(text = "🌿", fontSize = 46.sp)
+                    Image(
+                        painter = painterResource(id = R.drawable.logo_selaras),
+                        contentDescription = "Logo Selaras",
+                        modifier = Modifier.size(64.dp)
+                    )
                 }
             }
 
@@ -170,14 +178,6 @@ fun SplashScreen(
                 fontWeight = FontWeight.Bold,
                 color = OnboardingColors.TextPrimary,
                 letterSpacing = 1.sp
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = "Kesejahteraan Emosional Mandiri",
-                fontSize = 15.sp,
-                color = OnboardingColors.TextSecondary
             )
 
             Spacer(Modifier.height(48.dp))
@@ -239,21 +239,17 @@ fun OnboardingCarouselContent(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Surface(
-                    modifier = Modifier.size(110.dp),
-                    shape = CircleShape,
-                    color = OnboardingColors.PrimaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = currentSlide.iconDescription,
-                            fontSize = 52.sp
-                        )
-                    }
-                }
+                Image(
+                    painter = painterResource(id = currentSlide.iconRes),
+                    contentDescription = currentSlide.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
             }
         }
 
