@@ -1203,7 +1203,8 @@ private fun WeeklyAnalysisTabContent(
                                 else
                                     "Butuh ${4 - activeAnalysis.totalDaysRecorded} hari pencatatan lagi untuk mencapai syarat minimal 4 hari.",
                                 fontSize = 12.sp,
-                                color = CheckInColors.TextSecondary
+                                color = CheckInColors.TextSecondary,
+                                lineHeight = 17.sp
                             )
                         }
                     }
