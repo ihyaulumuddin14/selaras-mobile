@@ -25,6 +25,19 @@ import com.example.selaras.core.ui.components.SelarasHeader
 import com.example.selaras.domain.model.CheckIn
 import com.example.selaras.domain.model.WeeklyCheckInAnalysis
 import java.time.format.DateTimeFormatter
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.selaras.features.checkin.components.ConfettiEffect
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -377,6 +390,13 @@ private fun WizardProgressBar(currentStep: CheckInStep) {
         CheckInStep.NOTE -> 4
         CheckInStep.SUCCESS -> 4
     }
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = stepIndex / 4f,
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        label = "CheckInProgressBarAnimation"
+    )
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -403,7 +423,7 @@ private fun WizardProgressBar(currentStep: CheckInStep) {
         }
         Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
-            progress = { stepIndex / 4f },
+            progress = { animatedProgress },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(6.dp)
@@ -880,44 +900,123 @@ private fun NoteStep(
 private fun SuccessStep(
     onDismiss: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = CheckInColors.PrimaryContainer,
-            modifier = Modifier.size(80.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("✓", fontSize = 40.sp, color = CheckInColors.Primary, fontWeight = FontWeight.Bold)
-            }
+    val scaleAnim = remember { Animatable(0f) }
+    val checkmarkAlpha = remember { Animatable(0f) }
+    val rippleScale = remember { Animatable(0.7f) }
+    val rippleAlpha = remember { Animatable(0.6f) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            scaleAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
         }
-        Spacer(Modifier.height(20.dp))
-        Text(
-            text = "Catatan Berhasil Disimpan!",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = CheckInColors.TextPrimary
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Data telah tersimpan di penyimpanan aman lokalmu.",
-            fontSize = 14.sp,
-            color = CheckInColors.TextSecondary,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(28.dp))
-        Button(
-            onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
+        launch {
+            delay(100)
+            checkmarkAlpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 300, easing = LinearOutSlowInEasing)
+            )
+        }
+        launch {
+            delay(150)
+            rippleScale.animateTo(
+                targetValue = 1.7f,
+                animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            delay(150)
+            rippleAlpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        // Confetti celebration animation overlay
+        ConfettiEffect(modifier = Modifier.fillMaxSize())
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text("Lihat Analisis 7 Hari", fontWeight = FontWeight.SemiBold)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(130.dp)
+            ) {
+                // Expanding soft ripple ring
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .graphicsLayer {
+                            scaleX = rippleScale.value
+                            scaleY = rippleScale.value
+                            alpha = rippleAlpha.value
+                        }
+                        .clip(CircleShape)
+                        .background(CheckInColors.Primary.copy(alpha = 0.25f))
+                )
+
+                // Bouncy expanding circle
+                Surface(
+                    shape = CircleShape,
+                    color = CheckInColors.PrimaryContainer,
+                    modifier = Modifier
+                        .size(80.dp)
+                        .graphicsLayer {
+                            scaleX = scaleAnim.value
+                            scaleY = scaleAnim.value
+                        }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            "✓",
+                            fontSize = 42.sp,
+                            color = CheckInColors.Primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.graphicsLayer {
+                                alpha = checkmarkAlpha.value
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Catatan Berhasil Disimpan!",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = CheckInColors.TextPrimary
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Data telah tersimpan di penyimpanan aman lokalmu.",
+                fontSize = 14.sp,
+                color = CheckInColors.TextSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(28.dp))
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
+            ) {
+                Text("Lihat Analisis 7 Hari", fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

@@ -77,7 +77,8 @@ class MainActivity : ComponentActivity() {
             this,
             DashboardViewModel.Factory(
                 checkInRepository = container.checkInRepository,
-                screeningRepository = container.screeningRepository
+                screeningRepository = container.screeningRepository,
+                promptManager = container.dailyCheckInPromptManager
             )
         )[DashboardViewModel::class.java]
 
@@ -171,6 +172,7 @@ fun MainApp(
                             withContext(Dispatchers.IO) {
                                 container.database.clearAllTables()
                                 container.securityRepository.clearSecurity()
+                                container.dailyCheckInPromptManager.clear()
                             }
                             dashboardViewModel.refresh()
                             checkInViewModel.setTab(CheckInTab.TODAY)

@@ -23,6 +23,7 @@ class DashboardViewModel(
     private val getTodayCheckInUseCase: GetTodayCheckInUseCase,
     private val getWeeklyAnalysisUseCase: GetWeeklyCheckInAnalysisUseCase,
     private val screeningRepository: ScreeningRepository,
+    private val promptManager: DailyCheckInPromptManager? = null,
     private val timeProvider: () -> LocalTime = { LocalTime.now() },
     private val dateProvider: () -> LocalDate = { LocalDate.now() }
 ) : ViewModel() {
@@ -45,10 +46,42 @@ class DashboardViewModel(
     fun refresh() {
         val nowTime = timeProvider()
         val nowDate = dateProvider()
+        val isCheckedIn = _uiState.value.isTodayCheckedIn
+        val alreadyPrompted = promptManager?.hasPromptedToday() ?: true
+        val showDialog = !isCheckedIn && !alreadyPrompted
+        val shouldPulse = !isCheckedIn && alreadyPrompted
         _uiState.update {
             it.copy(
                 greeting = computeGreeting(nowTime),
-                formattedDate = formatDateIndonesian(nowDate)
+                formattedDate = formatDateIndonesian(nowDate),
+                showDailyCheckInDialog = showDialog,
+                shouldPulseCheckInCard = shouldPulse
+            )
+        }
+    }
+
+    /**
+     * Dismisses the daily check-in popup dialog and activates subtle pulse reminder.
+     */
+    fun dismissDailyCheckInDialog() {
+        promptManager?.markPromptedToday()
+        _uiState.update {
+            it.copy(
+                showDailyCheckInDialog = false,
+                shouldPulseCheckInCard = !it.isTodayCheckedIn
+            )
+        }
+    }
+
+    /**
+     * Confirms daily check-in popup dialog and prepares for navigation.
+     */
+    fun onConfirmDailyCheckInDialog() {
+        promptManager?.markPromptedToday()
+        _uiState.update {
+            it.copy(
+                showDailyCheckInDialog = false,
+                shouldPulseCheckInCard = !it.isTodayCheckedIn
             )
         }
     }
@@ -63,10 +96,16 @@ class DashboardViewModel(
                     _uiState.update { it.copy(errorMessage = e.message) }
                 }
                 .collect { checkIn ->
+                    val isCheckedIn = checkIn != null
+                    val alreadyPrompted = promptManager?.hasPromptedToday() ?: true
+                    val showDialog = !isCheckedIn && !alreadyPrompted
+                    val shouldPulse = !isCheckedIn && alreadyPrompted
                     _uiState.update {
                         it.copy(
                             todayCheckIn = checkIn,
-                            isTodayCheckedIn = checkIn != null
+                            isTodayCheckedIn = isCheckedIn,
+                            showDailyCheckInDialog = showDialog,
+                            shouldPulseCheckInCard = shouldPulse
                         )
                     }
                 }
@@ -152,7 +191,8 @@ class DashboardViewModel(
 
     class Factory(
         private val checkInRepository: CheckInRepository,
-        private val screeningRepository: ScreeningRepository
+        private val screeningRepository: ScreeningRepository,
+        private val promptManager: DailyCheckInPromptManager? = null
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(DashboardViewModel::class.java))
@@ -162,7 +202,8 @@ class DashboardViewModel(
             return DashboardViewModel(
                 getTodayCheckInUseCase = todayUseCase,
                 getWeeklyAnalysisUseCase = weeklyUseCase,
-                screeningRepository = screeningRepository
+                screeningRepository = screeningRepository,
+                promptManager = promptManager
             ) as T
         }
     }

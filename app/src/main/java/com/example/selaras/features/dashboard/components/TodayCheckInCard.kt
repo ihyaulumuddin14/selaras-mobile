@@ -1,5 +1,11 @@
 package com.example.selaras.features.dashboard.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -19,10 +25,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,7 +44,7 @@ import com.example.selaras.domain.model.CheckIn
  * Primary card on the dashboard showing today's Check-in status.
  *
  * Implements 2 distinct Figma states:
- * 1. Unrecorded state (`F3/Beranda` / Node 86:1195)
+ * 1. Unrecorded state (`F3/Beranda` / Node 86:1195) with optional gentle pulse animation
  * 2. Recorded state (`F3/Beranda tercatat` / Node 86:1203)
  */
 @Composable
@@ -42,7 +52,8 @@ fun TodayCheckInCard(
     todayCheckIn: CheckIn?,
     onStartCheckIn: () -> Unit,
     onViewWeeklyAnalysis: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPulsing: Boolean = false
 ) {
     val surfaceWhite = Color(0xFFFFFFFF)
     val cardBorder = Color(0xFFE2E8E3)
@@ -52,13 +63,52 @@ fun TodayCheckInCard(
     val primaryContainer = Color(0xFFDCECE3)
 
     if (todayCheckIn == null) {
+        val infiniteTransition = rememberInfiniteTransition(label = "CheckInPulseAnimation")
+        val pulseScale by if (isPulsing) {
+            infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.018f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "PulseScale"
+            )
+        } else {
+            remember { mutableFloatStateOf(1f) }
+        }
+
+        val borderAlpha by if (isPulsing) {
+            infiniteTransition.animateFloat(
+                initialValue = 0.35f,
+                targetValue = 0.9f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "PulseBorderAlpha"
+            )
+        } else {
+            remember { mutableFloatStateOf(0.35f) }
+        }
+
+        val animatedBorderColor = pineGreen.copy(alpha = borderAlpha)
+
         // State A: Belum Check-in (Figma 86:1195)
         Column(
             modifier = modifier
                 .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                }
                 .clip(RoundedCornerShape(16.dp))
                 .background(surfaceWhite)
-                .border(1.5.dp, cardBorder, RoundedCornerShape(16.dp))
+                .border(
+                    width = if (isPulsing) 1.8.dp else 1.5.dp,
+                    color = if (isPulsing) animatedBorderColor else cardBorder,
+                    shape = RoundedCornerShape(16.dp)
+                )
                 .padding(20.dp)
         ) {
             Row(
