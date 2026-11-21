@@ -33,7 +33,8 @@ fun DashboardHeader(
     greeting: String,
     formattedDate: String,
     onNavigateToSettings: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hasSettingsBadge: Boolean = false
 ) {
     val textPrimary = Color(0xFF243B35)
     val textSecondary = Color(0xFF52675F)
@@ -82,7 +83,7 @@ fun DashboardHeader(
             }
         }
 
-        // Settings Shortcut Button
+        // Settings Shortcut Button with Notification Red Bullet Badge
         Box(
             modifier = Modifier
                 .size(44.dp)
@@ -97,6 +98,17 @@ fun DashboardHeader(
                 tint = textPrimary,
                 modifier = Modifier.size(22.dp)
             )
+
+            if (hasSettingsBadge) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(top = 2.dp, end = 2.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE53935))
+                )
+            }
         }
     }
 }

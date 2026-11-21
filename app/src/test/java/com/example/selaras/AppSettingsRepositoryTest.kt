@@ -75,4 +75,20 @@ class AppSettingsRepositoryTest {
         assertNotNull(updated)
         assertTrue(updated!!.onboardingCompleted)
     }
+
+    @Test
+    fun testUpdateUserName() = runTest {
+        repository.initializeIfFirstLaunch()
+        val result = repository.updateUserName("Budi Santoso")
+        assertTrue(result.isSuccess)
+
+        val settings = repository.getSettings()
+        assertNotNull(settings)
+        assertEquals("Budi Santoso", settings?.userName)
+
+        // Clear user name
+        repository.updateUserName("")
+        val cleared = repository.getSettings()
+        assertNull(cleared?.userName)
+    }
 }

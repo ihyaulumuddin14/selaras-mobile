@@ -10,6 +10,8 @@ import com.example.selaras.domain.model.WeeklyCheckInAnalysis
 data class DashboardUiState(
     val greeting: String = "Selamat Datang",
     val formattedDate: String = "",
+    val userName: String? = null,
+    val isNameSet: Boolean = false,
     val todayCheckIn: CheckIn? = null,
     val isTodayCheckedIn: Boolean = false,
     val weeklyAnalysis: WeeklyCheckInAnalysis? = null,

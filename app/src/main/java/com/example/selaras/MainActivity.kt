@@ -78,7 +78,8 @@ class MainActivity : ComponentActivity() {
             DashboardViewModel.Factory(
                 checkInRepository = container.checkInRepository,
                 screeningRepository = container.screeningRepository,
-                promptManager = container.dailyCheckInPromptManager
+                promptManager = container.dailyCheckInPromptManager,
+                appSettingsRepository = container.appSettingsRepository
             )
         )[DashboardViewModel::class.java]
 
