@@ -208,7 +208,7 @@ fun OnboardingCarouselContent(
             .fillMaxSize()
             .padding(24.dp)
     ) {
-        // Top Action Bar (Skip button)
+        // Top Action Bar (Badge on the left, Skip button on the right)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -227,120 +227,131 @@ fun OnboardingCarouselContent(
                 )
             }
 
-            Spacer(Modifier.weight(0.8f))
-
-            // Slide Visual Emblem Card
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(240.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
-                border = BorderStroke(1.dp, OnboardingColors.CardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.size(110.dp),
-                        shape = CircleShape,
-                        color = OnboardingColors.PrimaryContainer
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = currentSlide.iconDescription,
-                                fontSize = 52.sp
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(32.dp))
-
-            // Headline & Description
-            Text(
-                text = currentSlide.title,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = OnboardingColors.TextPrimary,
-                lineHeight = 32.sp
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            Text(
-                text = currentSlide.subtitle,
-                fontSize = 15.sp,
-                color = OnboardingColors.TextSecondary,
-                lineHeight = 22.sp
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            // Pagination Dots Indicator
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                for (i in 0 until state.totalSlides) {
-                    val isSelected = i == state.carouselIndex
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .height(8.dp)
-                            .width(if (isSelected) 24.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSelected) OnboardingColors.Primary
-                                else OnboardingColors.Outline.copy(alpha = 0.3f)
-                            )
-                            .clickable { onDotClick(i) }
+            if (!state.isLastSlide) {
+                TextButton(onClick = onSkip) {
+                    Text(
+                        text = "Lewati",
+                        color = OnboardingColors.TextSecondary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
+        }
 
-            Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
 
-            // Navigation Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        // Slide Visual Emblem Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
+            border = BorderStroke(1.dp, OnboardingColors.CardBorder),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                if (state.carouselIndex > 0) {
-                    OutlinedButton(
-                        onClick = onPrev,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, OnboardingColors.Outline)
-                    ) {
+                Surface(
+                    modifier = Modifier.size(110.dp),
+                    shape = CircleShape,
+                    color = OnboardingColors.PrimaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Kembali",
-                            color = OnboardingColors.Primary,
-                            fontWeight = FontWeight.SemiBold
+                            text = currentSlide.iconDescription,
+                            fontSize = 52.sp
                         )
                     }
                 }
+            }
+        }
 
-                Button(
-                    onClick = onNext,
+        Spacer(Modifier.height(32.dp))
+
+        // Headline & Description
+        Text(
+            text = currentSlide.title,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = OnboardingColors.TextPrimary,
+            lineHeight = 32.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            text = currentSlide.subtitle,
+            fontSize = 15.sp,
+            color = OnboardingColors.TextSecondary,
+            lineHeight = 22.sp
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        // Pagination Dots Indicator
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            for (i in 0 until state.totalSlides) {
+                val isSelected = i == state.carouselIndex
+                Box(
                     modifier = Modifier
-                        .weight(if (state.carouselIndex > 0) 1f else 2f)
+                        .padding(horizontal = 4.dp)
+                        .height(8.dp)
+                        .width(if (isSelected) 24.dp else 8.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) OnboardingColors.Primary
+                            else OnboardingColors.Outline.copy(alpha = 0.3f)
+                        )
+                        .clickable { onDotClick(i) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        // Navigation Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (state.carouselIndex > 0) {
+                OutlinedButton(
+                    onClick = onPrev,
+                    modifier = Modifier
+                        .weight(1f)
                         .height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
+                    border = BorderStroke(1.dp, OnboardingColors.Outline)
                 ) {
                     Text(
-                        text = if (state.isLastSlide) "Selesai" else "Lanjut",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
+                        text = "Kembali",
+                        color = OnboardingColors.Primary,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+
+            Button(
+                onClick = onNext,
+                modifier = Modifier
+                    .weight(if (state.carouselIndex > 0) 1f else 2f)
+                    .height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
+            ) {
+                Text(
+                    text = if (state.isLastSlide) "Selesai" else "Lanjut",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
             }
         }
     }
