@@ -1190,9 +1190,9 @@ private fun WeeklyAnalysisTabContent(
                         Column {
                             Text(
                                 text = if (activeAnalysis.isEligibleForCounselorSummary)
-                                    "Syarat Ringkasan Konselor (F4) Terpenuhi"
+                                    "Syarat Ringkasan Konselor Terpenuhi"
                                 else
-                                    "Menuju Kelayakan Ringkasan Konselor (F4)",
+                                    "Menuju Kelayakan Ringkasan Konselor",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = CheckInColors.TextPrimary
