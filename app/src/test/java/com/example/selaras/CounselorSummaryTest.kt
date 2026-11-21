@@ -156,6 +156,23 @@ class CounselorSummaryTest {
         assertEquals(4, vm.uiState.value.recordedDays)
     }
 
+    @Test
+    fun `isTodayCheckedIn updates properly and can be checked`() {
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        assertFalse(vm.uiState.value.isTodayCheckedIn)
+        vm.setTodayCheckedIn(true)
+        assertTrue(vm.uiState.value.isTodayCheckedIn)
+        vm.setTodayCheckedIn(false)
+        assertFalse(vm.uiState.value.isTodayCheckedIn)
+    }
+
     // Fake Repositories
     private class FakeCheckInRepo : CheckInRepository {
         val checkIns = mutableListOf<CheckIn>()
