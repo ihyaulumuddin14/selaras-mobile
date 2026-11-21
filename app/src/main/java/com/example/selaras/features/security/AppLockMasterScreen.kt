@@ -66,12 +66,16 @@ fun AppLockMasterScreen(
         modifier = modifier.fillMaxSize()
     ) { step ->
         when (step) {
-            PinStep.ENTER_PIN -> {
+            PinStep.ENTER_PIN,
+            PinStep.ENTER_CURRENT_PIN -> {
                 AppLockScreen(
                     state = state,
                     onDigitPressed = viewModel::onDigitPressed,
                     onBackspace = viewModel::onBackspace,
-                    onForgotPassword = viewModel::switchToRecoveryMode
+                    onForgotPassword = viewModel::switchToRecoveryMode,
+                    onBack = if (onBackToPrevious != null && (step == PinStep.ENTER_CURRENT_PIN || state.mode == AppLockMode.CHANGE_PIN)) {
+                        onBackToPrevious
+                    } else null
                 )
             }
 
@@ -80,7 +84,13 @@ fun AppLockMasterScreen(
                 PinSetupScreen(
                     state = state,
                     onDigitPressed = viewModel::onDigitPressed,
-                    onBackspace = viewModel::onBackspace
+                    onBackspace = viewModel::onBackspace,
+                    onBack = if (onBackToPrevious != null && (state.mode == AppLockMode.CHANGE_PIN || state.mode == AppLockMode.SETUP)) {
+                        {
+                            val handled = viewModel.handleBack()
+                            if (!handled) onBackToPrevious()
+                        }
+                    } else null
                 )
             }
 
@@ -98,13 +108,18 @@ fun AppLockMasterScreen(
                     state = state,
                     onCodeChanged = viewModel::onRecoveryCodeInputChanged,
                     onVerifyCode = viewModel::verifyEnteredRecoveryCode,
-                    onCancel = viewModel::switchToUnlockMode
+                    onCancel = viewModel::onCancelRecovery
                 )
             }
 
             PinStep.RESET_SUCCESS -> {
                 PinResetSuccessScreen(
-                    onContinue = onUnlockSuccess
+                    onContinue = onUnlockSuccess,
+                    buttonText = if (state.mode == AppLockMode.CHANGE_PIN || onBackToPrevious != null) {
+                        "Kembali ke Pengaturan"
+                    } else {
+                        "Kembali ke Beranda"
+                    }
                 )
             }
 

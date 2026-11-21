@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.core.ui.components.SelarasHeader
+import com.example.selaras.features.security.AppLockMode
 import com.example.selaras.features.security.AppLockUiState
 import com.example.selaras.features.security.PinStep
 import com.example.selaras.features.security.components.PinDots
@@ -36,7 +38,8 @@ fun PinSetupScreen(
     state: AppLockUiState,
     onDigitPressed: (Int) -> Unit,
     onBackspace: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null
 ) {
     val background = Color(0xFFF7F7F2)
     val textPrimary = Color(0xFF243B35)
@@ -46,89 +49,111 @@ fun PinSetupScreen(
     val errorRed = Color(0xFFB3261E)
 
     val isConfirmStep = state.pinStep == PinStep.CONFIRM_NEW_PIN
+    val isChangePin = state.mode == AppLockMode.CHANGE_PIN
 
-    val title = if (isConfirmStep) "Konfirmasi PIN" else "Buat PIN Keamanan"
-    val subtitle = if (isConfirmStep) {
-        "Masukkan kembali 6 digit PIN yang baru saja kamu buat"
-    } else {
-        "Buat 6 digit PIN untuk mengunci dan melindungi privasi catatan kesehatan mentalmu"
+    val title = when {
+        isConfirmStep && isChangePin -> "Konfirmasi PIN Baru"
+        isConfirmStep -> "Konfirmasi PIN"
+        isChangePin -> "Buat PIN Baru"
+        else -> "Buat PIN Keamanan"
+    }
+
+    val subtitle = when {
+        isConfirmStep && isChangePin -> "Masukkan kembali 6 digit PIN baru yang kamu buat"
+        isConfirmStep -> "Masukkan kembali 6 digit PIN yang baru saja kamu buat"
+        isChangePin -> "Buat 6 digit PIN baru untuk mengunci dan melindungi aplikasi"
+        else -> "Buat 6 digit PIN untuk mengunci dan melindungi privasi catatan kesehatan mentalmu"
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(background)
-            .padding(horizontal = 24.dp),
+            .background(background),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
-
         // Top Header Section
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isConfirmStep) SecurityIcons.CheckCircle else SecurityIcons.Lock,
-                    contentDescription = null,
-                    tint = pineGreen,
-                    modifier = Modifier.size(32.dp)
+            if (onBack != null) {
+                SelarasHeader(
+                    title = if (isChangePin) "Ubah PIN" else "Atur PIN",
+                    onBack = onBack,
+                    showBackButton = true
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+            } else {
+                Spacer(modifier = Modifier.height(24.dp))
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isConfirmStep) SecurityIcons.CheckCircle else SecurityIcons.Lock,
+                        contentDescription = null,
+                        tint = pineGreen,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
 
-            Text(
-                text = title,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Medium,
-                color = textPrimary,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = subtitle,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Normal,
-                color = textSecondary,
-                textAlign = TextAlign.Center,
-                lineHeight = 20.sp,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // 6-dot visual indicator
-            PinDots(
-                length = 6,
-                filledCount = state.currentPinLength,
-                isError = state.isError
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Error feedback text
-            if (state.isError && state.errorMessage != null) {
-                Text(
-                    text = state.errorMessage,
-                    fontSize = 14.sp,
-                    color = errorRed,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Medium
-                )
-            } else {
-                // Placeholder to prevent layout jump
                 Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = title,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textPrimary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = subtitle,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = textSecondary,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // 6-dot visual indicator
+                PinDots(
+                    length = 6,
+                    filledCount = state.currentPinLength,
+                    isError = state.isError
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Error feedback text
+                if (state.isError && state.errorMessage != null) {
+                    Text(
+                        text = state.errorMessage,
+                        fontSize = 14.sp,
+                        color = errorRed,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Medium
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
             }
         }
 
@@ -136,6 +161,7 @@ fun PinSetupScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp)
         ) {
             PinKeypad(

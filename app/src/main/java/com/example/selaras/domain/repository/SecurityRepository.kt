@@ -50,6 +50,15 @@ interface SecurityRepository {
     fun resetPinWithRecovery(recoveryCode: String, newPin: String): Result<Unit>
 
     /**
+     * Changes the user's PIN to a new 6-digit PIN after verifying the current PIN.
+     *
+     * @param currentPin The current 6-digit numeric PIN.
+     * @param newPin The new 6-digit numeric PIN.
+     * @return Result indicating success or failure.
+     */
+    fun changePin(currentPin: String, newPin: String): Result<Unit>
+
+    /**
      * Clears stored PIN and recovery configuration (used during data reset/testing).
      */
     fun clearSecurity(): Result<Unit>

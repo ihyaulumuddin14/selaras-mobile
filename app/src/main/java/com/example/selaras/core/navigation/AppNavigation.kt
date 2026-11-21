@@ -252,7 +252,7 @@ fun AppNavigation(
                             onResetPin = {
                                 if (appLockViewModel != null) {
                                     if (container.securityRepository.isPinSet()) {
-                                        appLockViewModel.switchToRecoveryMode()
+                                        appLockViewModel.switchToChangePinMode()
                                     } else {
                                         appLockViewModel.switchToSetupMode()
                                     }

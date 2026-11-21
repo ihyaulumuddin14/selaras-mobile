@@ -155,6 +155,31 @@ class SecurityRepositoryTest {
     }
 
     @Test
+    fun testChangePinSuccess() {
+        securityRepository.setupPinAndRecovery("112233")
+
+        val changeResult = securityRepository.changePin("112233", "654321")
+        assertTrue(changeResult.isSuccess)
+
+        // Old PIN no longer valid
+        assertFalse(securityRepository.verifyPin("112233"))
+        // New PIN is valid
+        assertTrue(securityRepository.verifyPin("654321"))
+    }
+
+    @Test
+    fun testChangePinWithWrongCurrentPinFails() {
+        securityRepository.setupPinAndRecovery("112233")
+
+        val changeResult = securityRepository.changePin("000000", "654321")
+        assertTrue(changeResult.isFailure)
+
+        // Old PIN remains active
+        assertTrue(securityRepository.verifyPin("112233"))
+        assertFalse(securityRepository.verifyPin("654321"))
+    }
+
+    @Test
     fun testClearSecurity() {
         securityRepository.setupPinAndRecovery("123456")
         assertTrue(securityRepository.isPinSet())
