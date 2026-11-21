@@ -1325,7 +1325,7 @@ private fun HistoryTabContent(
         ) {
             item {
                 Text(
-                    text = "Riwayat Check-in (${entries.size} catatan)",
+                    text = "Riwayat Check-in (${entries.size})",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = CheckInColors.TextPrimary

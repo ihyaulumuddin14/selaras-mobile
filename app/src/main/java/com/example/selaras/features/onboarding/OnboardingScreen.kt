@@ -101,7 +101,6 @@ fun OnboardingScreen(
                         slides = viewModel.slides,
                         onNext = viewModel::nextSlide,
                         onPrev = viewModel::prevSlide,
-                        onSkip = viewModel::skipToConsent,
                         onDotClick = viewModel::setSlideIndex
                     )
                 }
@@ -198,7 +197,6 @@ fun OnboardingCarouselContent(
     slides: List<OnboardingSlideData>,
     onNext: () -> Unit,
     onPrev: () -> Unit,
-    onSkip: () -> Unit,
     onDotClick: (Int) -> Unit
 ) {
     val currentSlide = slides.getOrNull(state.carouselIndex) ?: slides.first()

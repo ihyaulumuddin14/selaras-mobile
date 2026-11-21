@@ -62,7 +62,7 @@ class ExportCounselorSummaryPdfUseCase {
         // Top Banner / Header
         canvas.drawText("Selaras · Ringkasan Mingguan untuk Konselor", 40f, y, titlePaint)
         y += 18f
-        canvas.drawText("Dokumen rekapitulasi data observasi mandiri untuk mempermudah sesi konsultasi.", 40f, y, headerSubtitlePaint)
+        canvas.drawText("Dokumen rekapitulasi data observasi mandiri.", 40f, y, headerSubtitlePaint)
         y += 20f
 
         // Disclaimer Box (Bukan diagnosis klinis)
@@ -71,8 +71,7 @@ class ExportCounselorSummaryPdfUseCase {
         paint.color = Color.rgb(0x4A, 0x3E, 0x56)
         paint.textSize = 9f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-        canvas.drawText("Pernyataan: Bukan Diagnosis Klinis", 52f, y + 16f, paint)
-        canvas.drawText("Ringkasan ini membantu percakapan, bukan penetapan kondisi klinis. Disusun secara lokal oleh pengguna.", 52f, y + 30f, paint)
+        canvas.drawText("Ringkasan ini bukan diagnosis klinis dan tidak menggantikan konsultasi profesional.", 52f, y + 16f, paint)
         y += 58f
 
         // Metadata
@@ -80,7 +79,7 @@ class ExportCounselorSummaryPdfUseCase {
         val periodStr = "${summary.periodStartDate.format(formatter)} – ${summary.periodEndDate.format(formatter)}"
         bodyPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         canvas.drawText("Periode Observasi: $periodStr", 40f, y, bodyPaint)
-        y += 24f
+        y += 56f
 
         val snapshot = try {
             JSONObject(summary.snapshotJson)
@@ -105,7 +104,7 @@ class ExportCounselorSummaryPdfUseCase {
 
         canvas.drawText(String.format(Locale.forLanguageTag("id"), "• Mood rata-rata: %.1f / 5", avgMood), 52f, y + 40f, bodyPaint)
         canvas.drawText(String.format(Locale.forLanguageTag("id"), "• Durasi tidur rata-rata: %.1f jam", avgSleep), 52f, y + 60f, bodyPaint)
-        canvas.drawText(String.format(Locale.forLanguageTag("id"), "• Energi rata-rata: %.1f / 5", avgEnergy), 52f, y + 80f, bodyPaint)
+        canvas.drawText(String.format(Locale.forLanguageTag("id"), "• Energi rata-rata: %.1f / 10", avgEnergy), 52f, y + 80f, bodyPaint)
         y += 116f
 
         // Daily entries
@@ -122,7 +121,7 @@ class ExportCounselorSummaryPdfUseCase {
                 val m = item.optInt("mood")
                 val s = item.optDouble("sleepHours")
                 val e = item.optInt("energy")
-                val line = String.format(Locale.forLanguageTag("id"), "• %s — Mood: %d/5, Tidur: %.1f jam, Energi: %d/5", d, m, s, e)
+                val line = String.format(Locale.forLanguageTag("id"), "• %s — Mood: %d/5, Tidur: %.1f jam, Energi: %d/10", d, m, s, e)
                 canvas.drawText(line, 52f, y, bodyPaint)
                 y += 14f
 
@@ -155,7 +154,7 @@ class ExportCounselorSummaryPdfUseCase {
             }
         } else {
             bodyPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-            canvas.drawText("• Tidak ada hasil skrining yang disertakan. Empat hari check-in cukup tanpa skrining tambahan.", 52f, y, bodyPaint)
+            canvas.drawText("• Tidak ada hasil skrining yang disertakan.", 52f, y, bodyPaint)
             y += 16f
         }
         y += 16f
@@ -167,9 +166,9 @@ class ExportCounselorSummaryPdfUseCase {
         bodyPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         if (!includeNotes) {
             bodyPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-            canvas.drawText("• Pilihan catatan pribadi nonaktif. Tidak ada teks catatan dalam ringkasan ini.", 52f, y, bodyPaint)
+            canvas.drawText("Pilihan catatan pribadi nonaktif/tidak disertakan.", 52f, y, bodyPaint)
         } else {
-            canvas.drawText("• Catatan pribadi terlampir sesuai tanggal yang dipilih pengguna.", 52f, y, bodyPaint)
+            canvas.drawText("Catatan pribadi terlampir sesuai tanggal yang dipilih pengguna.", 52f, y, bodyPaint)
         }
         y += 30f
 
@@ -177,7 +176,7 @@ class ExportCounselorSummaryPdfUseCase {
         paint.color = Color.rgb(0x7B, 0x91, 0x87)
         paint.textSize = 8f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        canvas.drawText("Dihasilkan secara lokal di perangkat · Privasi terlindungi · Selaras Mobile", 40f, 800f, paint)
+        canvas.drawText("Privasi terlindungi · Selaras", 40f, 800f, paint)
 
         document.finishPage(page)
 

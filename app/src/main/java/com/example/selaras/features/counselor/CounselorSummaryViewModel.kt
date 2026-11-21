@@ -10,6 +10,7 @@ import com.example.selaras.domain.model.CheckIn
 import com.example.selaras.domain.model.CounselorEligibility
 import com.example.selaras.domain.model.CounselorSummary
 import com.example.selaras.domain.model.ScreeningAnswer
+import com.example.selaras.domain.model.ScreeningCategory
 import com.example.selaras.domain.model.ScreeningResult
 import com.example.selaras.domain.model.ScreeningType
 import com.example.selaras.domain.repository.CheckInRepository
@@ -23,11 +24,16 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlin.math.roundToInt
 
 enum class CounselorScreenState {
     SELECT_CONTENT,    // Figma 168:2333: Check-in 4/7, optional screening & notes
@@ -50,9 +56,27 @@ data class DailySummaryItem(
     val note: String? = null
 )
 
+data class CounselorScreeningUiItem(
+    val id: Long,
+    val title: String,
+    val typeName: String,
+    val dateString: String,
+    val score: Int,
+    val categoryText: String,
+    val isSelected: Boolean = false,
+    val details: String = ""
+)
+
+data class CounselorNoteUiItem(
+    val date: LocalDate,
+    val title: String,
+    val noteText: String,
+    val isSelected: Boolean = false
+)
+
 data class CounselorSummaryUiState(
     val screenState: CounselorScreenState = CounselorScreenState.SELECT_CONTENT,
-    val isSimulatedMode: Boolean = true,
+    val isSimulatedMode: Boolean = false,
     val periodStartDate: LocalDate = LocalDate.of(2026, 10, 7),
     val periodEndDate: LocalDate = LocalDate.of(2026, 10, 13),
     val ruleVersion: String = "T06",
@@ -71,7 +95,7 @@ data class CounselorSummaryUiState(
     ),
     val avgMood: Double = 2.0,
     val avgSleepHours: Double = 6.0,
-    val avgEnergy: Double = 2.5,
+    val avgEnergy: Double = 5.0, // Scale 1..10
     val dailyItems: List<DailySummaryItem> = emptyList(),
     // Content selection
     val selectCheckIn: Boolean = true, // mandatory
@@ -80,6 +104,11 @@ data class CounselorSummaryUiState(
     val includePersonalNotes: Boolean = false,
     val selectNoteN09: Boolean = false,
     val selectNoteN11: Boolean = false,
+    // Real dynamic selection items
+    val availableScreenings: List<CounselorScreeningUiItem> = emptyList(),
+    val availableNotes: List<CounselorNoteUiItem> = emptyList(),
+    val createdSummary: CounselorSummary? = null,
+    val isTodayCheckedIn: Boolean = false,
     // Snapshot info
     val snapshotId: String = "S-01",
     val sourceRevision: String = "r4",
@@ -101,22 +130,64 @@ class CounselorSummaryViewModel(
     val uiState: StateFlow<CounselorSummaryUiState> = _uiState.asStateFlow()
 
     init {
-        // Initialize default daily items matching Figma dummy design
         setupDefaultDailyItems()
+        loadRealData()
     }
 
     private fun setupDefaultDailyItems() {
         val startDate = LocalDate.of(2026, 10, 7)
         val items = listOf(
-            DailySummaryItem(7, startDate, true, mood = 2, sleepHours = 6.0, energy = 2),
+            DailySummaryItem(7, startDate, true, mood = 2, sleepHours = 6.0, energy = 4),
             DailySummaryItem(8, startDate.plusDays(1), false),
-            DailySummaryItem(9, startDate.plusDays(2), true, mood = 3, sleepHours = 7.0, energy = 3, note = "Hari ini terasa berat. Saya ingin membicarakan cara meminta dukungan."),
+            DailySummaryItem(9, startDate.plusDays(2), true, mood = 3, sleepHours = 7.0, energy = 6, note = "Hari ini terasa berat. Saya ingin membicarakan cara meminta dukungan."),
             DailySummaryItem(10, startDate.plusDays(3), false),
-            DailySummaryItem(11, startDate.plusDays(4), true, mood = 2, sleepHours = 6.0, energy = 3),
+            DailySummaryItem(11, startDate.plusDays(4), true, mood = 2, sleepHours = 6.0, energy = 5),
             DailySummaryItem(12, startDate.plusDays(5), false),
-            DailySummaryItem(13, startDate.plusDays(6), true, mood = 1, sleepHours = 5.0, energy = 2)
+            DailySummaryItem(13, startDate.plusDays(6), true, mood = 1, sleepHours = 5.0, energy = 4)
         )
-        _uiState.update { it.copy(dailyItems = items) }
+        val defaultScreenings = listOf(
+            CounselorScreeningUiItem(
+                id = 1L,
+                title = "Skrining Mandiri · 9 Oktober 2026 (Skor 10)",
+                typeName = "Skrining Mandiri",
+                dateString = "9 Oktober 2026",
+                score = 10,
+                categoryText = "Gejala Depresi Tingkat Sedang",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 10 / 27\nKategori: Gejala Sedang\nDiselesaikan pada sesi refleksi mandiri"
+            ),
+            CounselorScreeningUiItem(
+                id = 2L,
+                title = "Skrining Berkala · 11 Oktober 2026 (Skor 8)",
+                typeName = "Skrining Berkala",
+                dateString = "11 Oktober 2026",
+                score = 8,
+                categoryText = "Gejala Depresi Tingkat Ringan",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 8 / 27\nKategori: Gejala Ringan\nDiselesaikan pada evaluasi berkala mingguan"
+            )
+        )
+        val defaultNotes = listOf(
+            CounselorNoteUiItem(
+                date = LocalDate.of(2026, 10, 9),
+                title = "Catatan Refleksi · 9 Oktober 2026",
+                noteText = "Hari ini terasa berat. Saya ingin membicarakan cara meminta dukungan.",
+                isSelected = false
+            ),
+            CounselorNoteUiItem(
+                date = LocalDate.of(2026, 10, 11),
+                title = "Catatan Refleksi · 11 Oktober 2026",
+                noteText = "Latihan pernapasan membantu saya lebih tenang di malam hari.",
+                isSelected = false
+            )
+        )
+        _uiState.update {
+            it.copy(
+                dailyItems = items,
+                availableScreenings = defaultScreenings,
+                availableNotes = defaultNotes
+            )
+        }
     }
 
     private fun buildDefaultInitialState(): CounselorSummaryUiState {
@@ -128,65 +199,251 @@ class CounselorSummaryViewModel(
             totalDays = 7,
             avgMood = 2.0,
             avgSleepHours = 6.0,
-            avgEnergy = 2.5
+            avgEnergy = 5.0
         )
     }
 
-    // Toggle content selection
+    /**
+     * Loads and observes real check-in and screening data from Room repositories.
+     */
+    fun loadRealData() {
+        viewModelScope.launch {
+            val today = LocalDate.now()
+            val latest = checkInRepository.getLatestCheckIn()
+            val endDate = if (latest != null && latest.checkInDate.isAfter(today)) {
+                latest.checkInDate
+            } else {
+                today
+            }
+            val startDate = endDate.minusDays(6)
+
+            checkInRepository.getCheckInsBetweenFlow(startDate, endDate)
+                .catch { /* ignore */ }
+                .collect { checkIns ->
+                    if (checkIns.isNotEmpty()) {
+                        val eligibility = getEligibilityUseCase(startDate, endDate)
+                        val recordedDates = eligibility.recordedDates
+                        val recordedCount = eligibility.recordedDays
+                        val isEligible = eligibility.isEligible
+
+                        val avgMood = (checkIns.map { it.mood }.average() * 10).roundToInt() / 10.0
+                        val avgSleepMinutes = checkIns.map { it.sleepDurationMinutes }.average()
+                        val avgSleepHours = (avgSleepMinutes / 60.0 * 10).roundToInt() / 10.0
+                        val avgEnergy = (checkIns.map { it.energy }.average() * 10).roundToInt() / 10.0
+
+                        val items = mutableListOf<DailySummaryItem>()
+                        var curr = startDate
+                        while (!curr.isAfter(endDate)) {
+                            val ci = checkIns.find { it.checkInDate == curr }
+                            items.add(
+                                DailySummaryItem(
+                                    dayNumber = curr.dayOfMonth,
+                                    date = curr,
+                                    isRecorded = ci != null,
+                                    mood = ci?.mood ?: 0,
+                                    sleepHours = (ci?.sleepDurationMinutes ?: 0) / 60.0,
+                                    energy = ci?.energy ?: 0,
+                                    note = ci?.note
+                                )
+                            )
+                            curr = curr.plusDays(1)
+                        }
+
+                        val notes = checkIns.filter { !it.note.isNullOrBlank() }.map { ci ->
+                            val fmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+                            CounselorNoteUiItem(
+                                date = ci.checkInDate,
+                                title = "Catatan Refleksi · ${ci.checkInDate.format(fmt)}",
+                                noteText = ci.note.orEmpty(),
+                                isSelected = true
+                            )
+                        }
+
+                        val timeFmt = DateTimeFormatter.ofPattern("d MMMM yyyy · HH.mm", Locale.forLanguageTag("id"))
+                        val timeStr = LocalDateTime.now().format(timeFmt)
+
+                        val isTodayRecorded = checkIns.any { it.checkInDate == today }
+
+                        _uiState.update { current ->
+                            current.copy(
+                                periodStartDate = startDate,
+                                periodEndDate = endDate,
+                                recordedDays = recordedCount,
+                                totalDays = eligibility.totalDaysInPeriod,
+                                recordedDates = recordedDates,
+                                missingDates = eligibility.missingDates,
+                                avgMood = avgMood,
+                                avgSleepHours = avgSleepHours,
+                                avgEnergy = avgEnergy,
+                                dailyItems = items,
+                                availableNotes = if (notes.isNotEmpty()) notes else current.availableNotes,
+                                createdTimeString = timeStr,
+                                isTodayCheckedIn = isTodayRecorded,
+                                screenState = if (isEligible) {
+                                    if (current.screenState == CounselorScreenState.INELIGIBLE) CounselorScreenState.SELECT_CONTENT else current.screenState
+                                } else {
+                                    CounselorScreenState.INELIGIBLE
+                                }
+                            )
+                        }
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            val today = LocalDate.now()
+            checkInRepository.getCheckInByDateFlow(today)
+                .catch { /* ignore */ }
+                .collect { todayCheckIn ->
+                    _uiState.update { it.copy(isTodayCheckedIn = todayCheckIn != null) }
+                }
+        }
+
+        viewModelScope.launch {
+            screeningRepository.getAllScreeningResultsFlow()
+                .catch { /* ignore */ }
+                .collect { screenings ->
+                    if (screenings.isNotEmpty()) {
+                        val dateFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+                        val items = screenings.map { sc ->
+                            val typeLabel = if (sc.screeningType == ScreeningType.ROUTINE) "Skrining Berkala" else "Skrining Mandiri"
+                            val catLabel = when (sc.category.name.uppercase()) {
+                                "MINIMAL" -> "Gejala Minimal"
+                                "RINGAN" -> "Gejala Ringan"
+                                "SEDANG" -> "Gejala Sedang"
+                                "SEDANG_BERAT" -> "Gejala Sedang Berat"
+                                "BERAT" -> "Gejala Berat"
+                                else -> sc.category.name
+                            }
+                            val dateStr = sc.periodEndDate.format(dateFmt)
+                            CounselorScreeningUiItem(
+                                id = sc.id,
+                                title = "$typeLabel · $dateStr (Skor $sc.totalScore)",
+                                typeName = typeLabel,
+                                dateString = dateStr,
+                                score = sc.totalScore,
+                                categoryText = catLabel,
+                                isSelected = false,
+                                details = "Instrumen: ${sc.instrumentVersion}\nSkor Total: ${sc.totalScore} / 27\nKategori: $catLabel\nDiselesaikan pada evaluasi PHQ-9"
+                            )
+                        }
+                        _uiState.update { it.copy(availableScreenings = items) }
+                    }
+                }
+        }
+    }
+
+    // Toggle content selection for screenings
+    fun toggleScreeningItem(id: Long, selected: Boolean) {
+        _uiState.update { current ->
+            val updated = current.availableScreenings.map {
+                if (it.id == id) it.copy(isSelected = selected) else it
+            }
+            current.copy(
+                availableScreenings = updated,
+                selectScreeningManual = updated.getOrNull(0)?.isSelected ?: false,
+                selectScreeningRoutine = updated.getOrNull(1)?.isSelected ?: false
+            )
+        }
+    }
+
+    // Toggle content selection for personal notes
+    fun toggleNoteItem(date: LocalDate, selected: Boolean) {
+        _uiState.update { current ->
+            val updated = current.availableNotes.map {
+                if (it.date == date) it.copy(isSelected = selected) else it
+            }
+            current.copy(
+                availableNotes = updated,
+                selectNoteN09 = updated.find { it.date.dayOfMonth == 9 }?.isSelected ?: false,
+                selectNoteN11 = updated.find { it.date.dayOfMonth == 11 }?.isSelected ?: false
+            )
+        }
+    }
+
     fun toggleScreeningManual(selected: Boolean) {
-        _uiState.update { it.copy(selectScreeningManual = selected) }
+        val firstId = _uiState.value.availableScreenings.getOrNull(0)?.id ?: 1L
+        toggleScreeningItem(firstId, selected)
     }
 
     fun toggleScreeningRoutine(selected: Boolean) {
-        _uiState.update { it.copy(selectScreeningRoutine = selected) }
+        val secondId = _uiState.value.availableScreenings.getOrNull(1)?.id ?: 2L
+        toggleScreeningItem(secondId, selected)
     }
 
     fun toggleIncludeNotes(included: Boolean) {
-        _uiState.update {
-            it.copy(
+        _uiState.update { current ->
+            current.copy(
                 includePersonalNotes = included,
-                // if turned off, unselect sub-notes
-                selectNoteN09 = if (included) it.selectNoteN09 else false,
-                selectNoteN11 = if (included) it.selectNoteN11 else false
+                availableNotes = current.availableNotes.map { it.copy(isSelected = included) },
+                selectNoteN09 = if (included) current.selectNoteN09 else false,
+                selectNoteN11 = if (included) current.selectNoteN11 else false
             )
         }
     }
 
     fun toggleNoteN09(selected: Boolean) {
-        _uiState.update { it.copy(selectNoteN09 = selected) }
+        val targetDate = _uiState.value.availableNotes.find { it.date.dayOfMonth == 9 }?.date ?: LocalDate.of(2026, 10, 9)
+        toggleNoteItem(targetDate, selected)
     }
 
     fun toggleNoteN11(selected: Boolean) {
-        _uiState.update { it.copy(selectNoteN11 = selected) }
+        val targetDate = _uiState.value.availableNotes.find { it.date.dayOfMonth == 11 }?.date ?: LocalDate.of(2026, 10, 11)
+        toggleNoteItem(targetDate, selected)
     }
 
     // Workflow actions
     fun createSummary() {
-        if (_uiState.value.recordedDays < 4) {
+        val currentState = _uiState.value
+        if (currentState.recordedDays < 4) {
             _uiState.update { it.copy(screenState = CounselorScreenState.INELIGIBLE) }
             return
         }
 
-        val hasScreenings = _uiState.value.selectScreeningManual || _uiState.value.selectScreeningRoutine
-        val hasNotes = _uiState.value.includePersonalNotes && (_uiState.value.selectNoteN09 || _uiState.value.selectNoteN11)
-        val snapshotId = if (hasScreenings || hasNotes) "S-02" else "S-01"
-
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    screenState = CounselorScreenState.PREPARING,
-                    snapshotId = snapshotId
-                )
-            }
+            _uiState.update { it.copy(screenState = CounselorScreenState.PREPARING) }
+            delay(600)
 
-            // Preparing delay for realistic transition
-            delay(1000)
+            val selectedScreeningIds = currentState.availableScreenings
+                .filter { it.isSelected }
+                .map { it.id }
 
-            _uiState.update {
-                it.copy(
-                    screenState = CounselorScreenState.PREVIEW,
-                    sourceRevision = "r4"
-                )
+            val selectedNoteDates = currentState.availableNotes
+                .filter { it.isSelected }
+                .map { it.date }
+
+            val result = createSummaryUseCase(
+                periodStartDate = currentState.periodStartDate,
+                periodEndDate = currentState.periodEndDate,
+                selectedScreeningIds = selectedScreeningIds,
+                selectedNoteDates = selectedNoteDates,
+                includeNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty(),
+                ruleVersion = currentState.ruleVersion
+            )
+
+            if (result.isSuccess) {
+                val savedSummary = result.getOrThrow()
+                _uiState.update {
+                    it.copy(
+                        screenState = CounselorScreenState.PREVIEW,
+                        createdSummary = savedSummary,
+                        snapshotId = "S-${savedSummary.id.toString().padStart(2, '0')}",
+                        sourceRevision = "r4"
+                    )
+                }
+            } else {
+                // Fallback for preview or mocked test environments
+                val hasScreenings = selectedScreeningIds.isNotEmpty() || currentState.selectScreeningManual || currentState.selectScreeningRoutine
+                val hasNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty()
+                val snapshotId = if (hasScreenings || hasNotes) "S-02" else "S-01"
+
+                _uiState.update {
+                    it.copy(
+                        screenState = CounselorScreenState.PREVIEW,
+                        snapshotId = snapshotId,
+                        sourceRevision = "r4"
+                    )
+                }
             }
         }
     }
@@ -194,11 +451,11 @@ class CounselorSummaryViewModel(
     fun exportPdf(context: Context) {
         viewModelScope.launch {
             _uiState.update { it.copy(screenState = CounselorScreenState.GENERATING_PDF) }
-            delay(800)
+            delay(600)
 
             val currentState = _uiState.value
-            val summary = CounselorSummary(
-                screeningResultId = if (currentState.selectScreeningManual || currentState.selectScreeningRoutine) 1L else null,
+            val summaryToExport = currentState.createdSummary ?: CounselorSummary(
+                screeningResultId = currentState.availableScreenings.firstOrNull { it.isSelected }?.id,
                 periodStartDate = currentState.periodStartDate,
                 periodEndDate = currentState.periodEndDate,
                 includeCheckinAnalysis = true,
@@ -207,12 +464,20 @@ class CounselorSummaryViewModel(
                 snapshotJson = buildSnapshotJsonString(currentState)
             )
 
-            val exportResult = exportPdfUseCase(context, summary)
+            // Ensure summary is persisted in counselorRepository if not already
+            val finalSummary = if (summaryToExport.id == 0L) {
+                counselorRepository.createSummary(summaryToExport).getOrDefault(summaryToExport)
+            } else {
+                summaryToExport
+            }
+
+            val exportResult = exportPdfUseCase(context, finalSummary)
             if (exportResult.isSuccess) {
                 _uiState.update {
                     it.copy(
                         screenState = CounselorScreenState.EXPORT_SUCCESS,
-                        generatedPdfFile = exportResult.getOrNull()
+                        generatedPdfFile = exportResult.getOrNull(),
+                        createdSummary = finalSummary
                     )
                 }
             } else {
@@ -229,7 +494,7 @@ class CounselorSummaryViewModel(
     fun refreshPreview() {
         viewModelScope.launch {
             _uiState.update { it.copy(screenState = CounselorScreenState.PREPARING) }
-            delay(800)
+            delay(600)
             _uiState.update {
                 it.copy(
                     screenState = CounselorScreenState.PREVIEW,
@@ -255,22 +520,27 @@ class CounselorSummaryViewModel(
         _uiState.update { it.copy(screenState = state) }
     }
 
-    // Figma simulation helpers
+    fun setTodayCheckedIn(checkedIn: Boolean) {
+        _uiState.update { it.copy(isTodayCheckedIn = checkedIn) }
+    }
+
+    // Figma simulation helpers for testing and previews
     fun simulateIneligible() {
         val startDate = LocalDate.of(2026, 10, 7)
         val items = listOf(
-            DailySummaryItem(7, startDate, true, mood = 2, sleepHours = 6.0, energy = 2),
+            DailySummaryItem(7, startDate, true, mood = 2, sleepHours = 6.0, energy = 4),
             DailySummaryItem(8, startDate.plusDays(1), false),
-            DailySummaryItem(9, startDate.plusDays(2), true, mood = 3, sleepHours = 7.0, energy = 3),
+            DailySummaryItem(9, startDate.plusDays(2), true, mood = 3, sleepHours = 7.0, energy = 6),
             DailySummaryItem(10, startDate.plusDays(3), false),
-            DailySummaryItem(11, startDate.plusDays(4), true, mood = 2, sleepHours = 6.0, energy = 3),
+            DailySummaryItem(11, startDate.plusDays(4), true, mood = 2, sleepHours = 6.0, energy = 5),
             DailySummaryItem(12, startDate.plusDays(5), false),
-            DailySummaryItem(13, startDate.plusDays(6), false) // 13 Okt not available!
+            DailySummaryItem(13, startDate.plusDays(6), false)
         )
         _uiState.update {
             it.copy(
                 screenState = CounselorScreenState.INELIGIBLE,
                 recordedDays = 3,
+                isTodayCheckedIn = false,
                 dailyItems = items,
                 recordedDates = listOf(
                     LocalDate.of(2026, 10, 7),
@@ -326,10 +596,19 @@ class CounselorSummaryViewModel(
     }
 
     private fun buildSnapshotJsonString(state: CounselorSummaryUiState): String {
+        val dailyEntriesJson = state.dailyItems.filter { it.isRecorded }.joinToString(",") { item ->
+            val noteStr = if (state.includePersonalNotes && item.note != null) item.note else ""
+            """{"date": "${item.date}", "mood": ${item.mood}, "sleepHours": ${item.sleepHours}, "energy": ${item.energy}, "note": "$noteStr"}"""
+        }
+
+        val screeningsJson = state.availableScreenings.filter { it.isSelected }.joinToString(",") { sc ->
+            """{"type": "${sc.typeName}", "score": ${sc.score}, "category": "${sc.categoryText}", "instrumentVersion": "PHQ-9 v1.0"}"""
+        }
+
         return """
         {
             "snapshotId": "${state.snapshotId}",
-            "createdAt": "2026-10-13T14:30:00Z",
+            "createdAt": "${java.time.Instant.now()}",
             "periodStartDate": "${state.periodStartDate}",
             "periodEndDate": "${state.periodEndDate}",
             "ruleVersion": "${state.ruleVersion}",
@@ -338,15 +617,8 @@ class CounselorSummaryViewModel(
             "avgSleepHours": ${state.avgSleepHours},
             "avgEnergy": ${state.avgEnergy},
             "includeNotes": ${state.includePersonalNotes},
-            "dailyEntries": [
-                {"date": "2026-10-07", "mood": 2, "sleepHours": 6.0, "energy": 2},
-                {"date": "2026-10-09", "mood": 3, "sleepHours": 7.0, "energy": 3, "note": "${if (state.selectNoteN09) "Hari ini terasa berat. Saya ingin membicarakan cara meminta dukungan." else ""}"},
-                {"date": "2026-10-11", "mood": 2, "sleepHours": 6.0, "energy": 3},
-                {"date": "2026-10-13", "mood": 1, "sleepHours": 5.0, "energy": 2}
-            ],
-            "screenings": [
-                ${if (state.selectScreeningManual) """{"type": "MANUAL", "score": 10, "category": "SEDANG", "instrumentVersion": "PHQ-9 v1.0"}""" else ""}${if (state.selectScreeningManual && state.selectScreeningRoutine) "," else ""}${if (state.selectScreeningRoutine) """{"type": "ROUTINE", "score": 8, "category": "RINGAN", "instrumentVersion": "PHQ-9 v1.0"}""" else ""}
-            ]
+            "dailyEntries": [$dailyEntriesJson],
+            "screenings": [$screeningsJson]
         }
         """.trimIndent()
     }
