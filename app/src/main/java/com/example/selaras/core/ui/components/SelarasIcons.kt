@@ -392,4 +392,35 @@ object SelarasIcons {
             }
         }.build()
     }
+
+    val Info: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Info",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 2f)
+                curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
+                reflectiveCurveTo(6.48f, 22f, 12f, 22f)
+                reflectiveCurveTo(22f, 17.52f, 22f, 12f)
+                reflectiveCurveTo(17.52f, 2f, 12f, 2f)
+                close()
+                moveTo(13f, 17f)
+                horizontalLineTo(11f)
+                verticalLineTo(11f)
+                horizontalLineTo(13f)
+                verticalLineTo(17f)
+                close()
+                moveTo(13f, 9f)
+                horizontalLineTo(11f)
+                verticalLineTo(7f)
+                horizontalLineTo(13f)
+                verticalLineTo(9f)
+                close()
+            }
+        }.build()
+    }
 }

@@ -241,7 +241,15 @@ fun AppNavigation(
                             .consumeWindowInsets(innerPadding)
                     ) {
                         CounselorSummaryScreen(
-                            onNavigateBack = { subDestination = SubDestination.NONE }
+                            onNavigateBack = { subDestination = SubDestination.NONE },
+                            onNavigateToHelp = {
+                                subDestination = SubDestination.NONE
+                                currentTab = NavTab.HELP
+                            },
+                            onNavigateToCheckIn = {
+                                subDestination = SubDestination.NONE
+                                currentTab = NavTab.CHECK_IN
+                            }
                         )
                     }
                 }

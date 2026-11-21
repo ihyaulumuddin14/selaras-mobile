@@ -13,6 +13,7 @@ import com.example.selaras.data.datasource.remote.FakeCheckInRemoteDataSource
 import com.example.selaras.data.repository.AppSettingsRepositoryImpl
 import com.example.selaras.data.repository.BreathingRepositoryImpl
 import com.example.selaras.data.repository.CheckInRepositoryImpl
+import com.example.selaras.data.repository.CounselorRepositoryImpl
 import com.example.selaras.data.repository.ScreeningRepositoryImpl
 import com.example.selaras.data.repository.SecurityRepositoryImpl
 import com.example.selaras.data.sync.BreathingSyncManager
@@ -20,6 +21,7 @@ import com.example.selaras.data.sync.CheckInSyncManager
 import com.example.selaras.domain.repository.AppSettingsRepository
 import com.example.selaras.domain.repository.BreathingRepository
 import com.example.selaras.domain.repository.CheckInRepository
+import com.example.selaras.domain.repository.CounselorRepository
 import com.example.selaras.domain.repository.ScreeningRepository
 import com.example.selaras.domain.repository.SecurityRepository
 import com.example.selaras.features.dashboard.DailyCheckInPromptManager
@@ -36,6 +38,7 @@ interface AppContainer {
     val breathingRepository: BreathingRepository
     val checkInRepository: CheckInRepository
     val screeningRepository: ScreeningRepository
+    val counselorRepository: CounselorRepository
     val checkInSyncManager: CheckInSyncManager
     val breathingSyncManager: BreathingSyncManager
     val appSettingsRepository: AppSettingsRepository
@@ -93,6 +96,10 @@ class DefaultAppContainer(context: Context) : AppContainer {
             screeningResultDao = database.screeningResultDao(),
             screeningAnswerDao = database.screeningAnswerDao()
         )
+    }
+
+    override val counselorRepository: CounselorRepository by lazy {
+        CounselorRepositoryImpl(database.counselorSummaryDao())
     }
 
     override val checkInSyncManager: CheckInSyncManager by lazy {

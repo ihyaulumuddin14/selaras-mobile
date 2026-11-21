@@ -1,8 +1,10 @@
 package com.example.selaras.features.onboarding
 
+import androidx.annotation.DrawableRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.selaras.R
 import com.example.selaras.domain.repository.AppSettingsRepository
 import com.example.selaras.domain.usecase.onboarding.AcceptConsentUseCase
 import com.example.selaras.domain.usecase.onboarding.CompleteOnboardingUseCase
@@ -27,7 +29,14 @@ data class OnboardingSlideData(
     val title: String,
     val subtitle: String,
     val categoryBadge: String,
-    val iconDescription: String
+    val iconDescription: String,
+    @get:DrawableRes val iconRes: Int = when {
+        iconDescription.contains("welcome") -> R.drawable.welcome_slide_icon
+        iconDescription.contains("book") -> R.drawable.book_slide_icon
+        iconDescription.contains("calm") -> R.drawable.calm_slide_icon
+        iconDescription.contains("notes") -> R.drawable.notes_slide_icon
+        else -> R.drawable.logo_selaras
+    }
 )
 
 data class OnboardingUiState(
@@ -60,25 +69,29 @@ class OnboardingViewModel(
             categoryBadge = "Selamat Datang di SELARAS",
             title = "Pelan-pelan kenali dirimu",
             subtitle = "Teman untuk memahami perasaan, menemukan jeda, dan merawat diri setiap hari.",
-            iconDescription = "🌱"
+            iconDescription = "welcome_slide_icon.png",
+            iconRes = R.drawable.welcome_slide_icon
         ),
         OnboardingSlideData(
             categoryBadge = "Kenali Harimu",
             title = "Apa kabarmu hari ini?",
             subtitle = "Catat suasana hati, energi, dan durasi tidur. Temukan pola dari check-in harianmu.",
-            iconDescription = "☀️"
+            iconDescription = "book_slide_icon.png",
+            iconRes = R.drawable.book_slide_icon
         ),
         OnboardingSlideData(
             categoryBadge = "Ruang Bernapas",
             title = "Tarik napas Beri ruang.",
             subtitle = "Ikuti latihan pernapasan sederhana untuk membantu tubuh dan pikiran lebih rileks.",
-            iconDescription = "💨"
+            iconDescription = "calm_slide_icon.png",
+            iconRes = R.drawable.calm_slide_icon
         ),
         OnboardingSlideData(
             categoryBadge = "Pahami Dirimu",
             title = "Pahami pola mulai bercerita.",
             subtitle = "Kenali diri lewat skrining dan ringkasan pribadi. Pilih yang ingin kamu bawa saat konseling.\n" + "Bukan diagnosis atau pengganti tenaga profesional.",
-            iconDescription = "📊"
+            iconDescription = "notes_slide_icon.png",
+            iconRes = R.drawable.notes_slide_icon
         )
     )
 
