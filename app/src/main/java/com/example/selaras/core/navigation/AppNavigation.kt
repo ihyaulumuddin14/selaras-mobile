@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.selaras.core.di.AppContainer
@@ -87,104 +88,58 @@ fun AppNavigation(
         }
     }
 
-    val isShowingBottomNav = subDestination == SubDestination.NONE
-
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        bottomBar = {
-            if (isShowingBottomNav) {
-                BottomNavBar(
-                    selectedTab = currentTab,
-                    onTabSelected = { tab ->
-                        currentTab = tab
-                        subDestination = SubDestination.NONE
-                    }
+    AnimatedContent(
+        targetState = subDestination,
+        contentAlignment = Alignment.TopStart,
+        transitionSpec = {
+            if (targetState != SubDestination.NONE) {
+                (slideIntoContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(300))).togetherWith(
+                    slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                        animationSpec = tween(300, easing = FastOutSlowInEasing)
+                    ) + fadeOut(animationSpec = tween(200))
+                )
+            } else {
+                (slideIntoContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(300))).togetherWith(
+                    slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                        animationSpec = tween(300, easing = FastOutSlowInEasing)
+                    ) + fadeOut(animationSpec = tween(200))
                 )
             }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
-        ) {
-            AnimatedContent(
-                targetState = subDestination,
-                transitionSpec = {
-                    if (targetState != SubDestination.NONE) {
-                        (slideIntoContainer(
-                            towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                            animationSpec = tween(320, easing = FastOutSlowInEasing)
-                        ) + fadeIn(animationSpec = tween(320))).togetherWith(
-                            slideOutOfContainer(
-                                towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                                animationSpec = tween(280, easing = FastOutSlowInEasing)
-                            ) + fadeOut(animationSpec = tween(220))
-                        )
-                    } else {
-                        (slideIntoContainer(
-                            towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                            animationSpec = tween(320, easing = FastOutSlowInEasing)
-                        ) + fadeIn(animationSpec = tween(320))).togetherWith(
-                            slideOutOfContainer(
-                                towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                                animationSpec = tween(280, easing = FastOutSlowInEasing)
-                            ) + fadeOut(animationSpec = tween(220))
+        },
+        label = "SubDestinationTransition",
+        modifier = modifier.fillMaxSize()
+    ) { destination ->
+        when (destination) {
+            SubDestination.NONE -> {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    bottomBar = {
+                        BottomNavBar(
+                            selectedTab = currentTab,
+                            onTabSelected = { tab ->
+                                currentTab = tab
+                                subDestination = SubDestination.NONE
+                            }
                         )
                     }
-                },
-                label = "SubDestinationTransition",
-                modifier = Modifier.fillMaxSize()
-            ) { destination ->
-                when (destination) {
-                    SubDestination.BREATHING -> {
-                        BreathingScreen(
-                            viewModel = breathingViewModel,
-                            onExit = { subDestination = SubDestination.NONE }
-                        )
-                    }
-
-                    SubDestination.COUNSELOR_SUMMARY -> {
-                        CounselorSummaryScreen(
-                            onNavigateBack = { subDestination = SubDestination.NONE }
-                        )
-                    }
-
-                    SubDestination.SETTINGS -> {
-                        SettingsScreen(
-                            isPinSet = container.securityRepository.isPinSet(),
-                            onNavigateBack = { subDestination = SubDestination.NONE },
-                            onResetPin = {
-                                if (appLockViewModel != null) {
-                                    if (container.securityRepository.isPinSet()) {
-                                        appLockViewModel.switchToRecoveryMode()
-                                    } else {
-                                        appLockViewModel.switchToSetupMode()
-                                    }
-                                    subDestination = SubDestination.PIN_SETUP
-                                }
-                            },
-                            onDeleteAllData = onResetToOnboarding
-                        )
-                    }
-
-                    SubDestination.PIN_SETUP -> {
-                        if (appLockViewModel != null) {
-                            AppLockMasterScreen(
-                                viewModel = appLockViewModel,
-                                onUnlockSuccess = { subDestination = SubDestination.SETTINGS },
-                                onSetupComplete = { subDestination = SubDestination.SETTINGS },
-                                onBackToPrevious = { subDestination = SubDestination.SETTINGS }
-                            )
-                        } else {
-                            subDestination = SubDestination.SETTINGS
-                        }
-                    }
-
-                    SubDestination.NONE -> {
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .consumeWindowInsets(innerPadding)
+                    ) {
                         AnimatedContent(
                             targetState = currentTab,
+                            contentAlignment = Alignment.TopStart,
                             transitionSpec = {
                                 val direction = if (targetState.ordinal > initialState.ordinal) {
                                     AnimatedContentTransitionScope.SlideDirection.Left
@@ -241,6 +196,94 @@ fun AppNavigation(
                                     HelpScreen()
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            SubDestination.BREATHING -> {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize()
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .consumeWindowInsets(innerPadding)
+                    ) {
+                        BreathingScreen(
+                            viewModel = breathingViewModel,
+                            onExit = { subDestination = SubDestination.NONE }
+                        )
+                    }
+                }
+            }
+
+            SubDestination.COUNSELOR_SUMMARY -> {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize()
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .consumeWindowInsets(innerPadding)
+                    ) {
+                        CounselorSummaryScreen(
+                            onNavigateBack = { subDestination = SubDestination.NONE }
+                        )
+                    }
+                }
+            }
+
+            SubDestination.SETTINGS -> {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize()
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .consumeWindowInsets(innerPadding)
+                    ) {
+                        SettingsScreen(
+                            isPinSet = container.securityRepository.isPinSet(),
+                            onNavigateBack = { subDestination = SubDestination.NONE },
+                            onResetPin = {
+                                if (appLockViewModel != null) {
+                                    if (container.securityRepository.isPinSet()) {
+                                        appLockViewModel.switchToRecoveryMode()
+                                    } else {
+                                        appLockViewModel.switchToSetupMode()
+                                    }
+                                    subDestination = SubDestination.PIN_SETUP
+                                }
+                            },
+                            onDeleteAllData = onResetToOnboarding
+                        )
+                    }
+                }
+            }
+
+            SubDestination.PIN_SETUP -> {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize()
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .consumeWindowInsets(innerPadding)
+                    ) {
+                        if (appLockViewModel != null) {
+                            AppLockMasterScreen(
+                                viewModel = appLockViewModel,
+                                onUnlockSuccess = { subDestination = SubDestination.SETTINGS },
+                                onSetupComplete = { subDestination = SubDestination.SETTINGS },
+                                onBackToPrevious = { subDestination = SubDestination.SETTINGS }
+                            )
+                        } else {
+                            subDestination = SubDestination.SETTINGS
                         }
                     }
                 }

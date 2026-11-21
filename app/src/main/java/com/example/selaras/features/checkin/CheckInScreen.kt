@@ -494,7 +494,7 @@ private fun MoodStep(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
         ) {
-            Text("Lanjut ke Energi", fontWeight = FontWeight.SemiBold)
+            Text("Lanjut", fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -610,7 +610,7 @@ private fun EnergyStep(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
             ) {
-                Text("Lanjut ke Tidur", fontWeight = FontWeight.SemiBold)
+                Text("Lanjut", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -786,7 +786,7 @@ private fun SleepStep(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
             ) {
-                Text("Lanjut ke Catatan", fontWeight = FontWeight.SemiBold)
+                Text("Lanjut", fontWeight = FontWeight.SemiBold)
             }
         }
     }
