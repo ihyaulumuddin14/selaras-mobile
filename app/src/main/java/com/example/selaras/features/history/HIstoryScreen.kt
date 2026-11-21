@@ -55,7 +55,7 @@ fun HistoryScreen(
             .padding(horizontal = 20.dp)
             .verticalScroll(scrollState)
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = "Riwayat Catatan",

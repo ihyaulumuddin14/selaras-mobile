@@ -50,15 +50,13 @@ fun CheckInScreen(
     val state by viewModel.uiState.collectAsState()
 
     Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding(),
+        modifier = Modifier.fillMaxSize(),
         color = CheckInColors.Background
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
             CheckInHeader(
-                title = "Daily Check-in",
+                title = "Check-in Harian",
                 onBack = onBack
             )
 

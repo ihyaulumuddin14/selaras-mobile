@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -37,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.selaras.core.ui.components.SelarasIcons
+import com.example.selaras.features.breathing.BreathingColors
 
 /**
  * Screen for managing App Lock, Notifications, and Local Data Privacy (Figma 168:2351, 168:2353).
@@ -66,30 +70,35 @@ fun SettingsScreen(
             .padding(horizontal = 20.dp)
             .verticalScroll(scrollState)
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
-
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
-                onClick = onNavigateBack,
-                modifier = Modifier.height(36.dp)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onNavigateBack),
+                contentAlignment = Alignment.Center
             ) {
-                Text(text = "‹ Kembali", color = pineGreen, fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Kembali",
+                    tint = pineGreen
+                )
             }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Pengaturan & Privasi",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = textPrimary
+            )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Pengaturan & Privasi",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = textPrimary
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Section 1: Keamanan & Kunci Aplikasi
         Text(
