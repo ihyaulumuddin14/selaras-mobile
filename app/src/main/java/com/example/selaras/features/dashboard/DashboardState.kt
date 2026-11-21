@@ -17,6 +17,8 @@ data class DashboardUiState(
     val daysRecordedThisWeek: Int = 0,
     val isEligibleForCounselorSummary: Boolean = false,
     val daysNeededForCounselorSummary: Int = 4,
+    val showDailyCheckInDialog: Boolean = false,
+    val shouldPulseCheckInCard: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null
 )

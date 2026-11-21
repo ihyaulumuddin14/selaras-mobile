@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.selaras.core.ui.components.SelarasIcons
 import com.example.selaras.features.dashboard.components.CrisisBanner
+import com.example.selaras.features.dashboard.components.DailyCheckInDialog
 import com.example.selaras.features.dashboard.components.DashboardHeader
 import com.example.selaras.features.dashboard.components.QuickActionCard
 import com.example.selaras.features.dashboard.components.TodayCheckInCard
@@ -38,7 +39,9 @@ fun DashboardScreen(
     onNavigateToCounselorSummary: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToHelp: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToEditCheckIn: () -> Unit = onNavigateToCheckIn,
+    onNavigateToWeeklyAnalysis: () -> Unit = onNavigateToCheckIn
 ) {
     val state by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
@@ -76,7 +79,9 @@ fun DashboardScreen(
             TodayCheckInCard(
                 todayCheckIn = state.todayCheckIn,
                 onStartCheckIn = onNavigateToCheckIn,
-                onViewWeeklyAnalysis = onNavigateToCheckIn
+                onEditCheckIn = onNavigateToEditCheckIn,
+                onViewWeeklyAnalysis = onNavigateToWeeklyAnalysis,
+                isPulsing = state.shouldPulseCheckInCard
             )
 
             // 3. Quick Action Section Header
@@ -148,5 +153,16 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    // Daily Check-in reminder popup dialog on first visit of the day
+    if (state.showDailyCheckInDialog) {
+        DailyCheckInDialog(
+            onDismiss = viewModel::dismissDailyCheckInDialog,
+            onCheckInNow = {
+                viewModel.onConfirmDailyCheckInDialog()
+                onNavigateToCheckIn()
+            }
+        )
     }
 }

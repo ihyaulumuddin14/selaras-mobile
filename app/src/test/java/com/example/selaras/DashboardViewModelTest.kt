@@ -9,6 +9,7 @@ import com.example.selaras.domain.repository.CheckInRepository
 import com.example.selaras.domain.repository.ScreeningRepository
 import com.example.selaras.domain.usecase.checkin.GetTodayCheckInUseCase
 import com.example.selaras.domain.usecase.checkin.GetWeeklyCheckInAnalysisUseCase
+import com.example.selaras.features.dashboard.DailyCheckInPromptManager
 import com.example.selaras.features.dashboard.DashboardViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -265,5 +266,100 @@ class DashboardViewModelTest {
         assertNotNull(state.latestScreening)
         assertEquals(6, state.latestScreening?.totalScore)
         assertEquals(ScreeningCategory.RINGAN, state.latestScreening?.category)
+    }
+
+    @Test
+    fun testDailyCheckInDialogTriggerOnFirstEntryWhenNotCheckedIn() = runTest {
+        val promptManager = DailyCheckInPromptManager(dateProvider = { fixedDate })
+        viewModel = DashboardViewModel(
+            getTodayCheckInUseCase = GetTodayCheckInUseCase(checkInRepository),
+            getWeeklyAnalysisUseCase = GetWeeklyCheckInAnalysisUseCase(checkInRepository),
+            screeningRepository = fakeScreeningRepository,
+            promptManager = promptManager,
+            timeProvider = { morningTime },
+            dateProvider = { fixedDate }
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.isTodayCheckedIn)
+        assertTrue(state.showDailyCheckInDialog)
+        assertFalse(state.shouldPulseCheckInCard)
+    }
+
+    @Test
+    fun testDailyCheckInDialogDismissActivatesPulseReminder() = runTest {
+        val promptManager = DailyCheckInPromptManager(dateProvider = { fixedDate })
+        viewModel = DashboardViewModel(
+            getTodayCheckInUseCase = GetTodayCheckInUseCase(checkInRepository),
+            getWeeklyAnalysisUseCase = GetWeeklyCheckInAnalysisUseCase(checkInRepository),
+            screeningRepository = fakeScreeningRepository,
+            promptManager = promptManager,
+            timeProvider = { morningTime },
+            dateProvider = { fixedDate }
+        )
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.showDailyCheckInDialog)
+
+        // User dismisses dialog ("Nanti Saja")
+        viewModel.dismissDailyCheckInDialog()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.showDailyCheckInDialog)
+        assertTrue(state.shouldPulseCheckInCard)
+        assertTrue(promptManager.hasPromptedToday())
+    }
+
+    @Test
+    fun testDailyCheckInDialogNotShownOnSecondEntryPulsingCardInstead() = runTest {
+        val promptManager = DailyCheckInPromptManager(dateProvider = { fixedDate })
+        promptManager.markPromptedToday() // Already prompted on 1st entry
+
+        viewModel = DashboardViewModel(
+            getTodayCheckInUseCase = GetTodayCheckInUseCase(checkInRepository),
+            getWeeklyAnalysisUseCase = GetWeeklyCheckInAnalysisUseCase(checkInRepository),
+            screeningRepository = fakeScreeningRepository,
+            promptManager = promptManager,
+            timeProvider = { morningTime },
+            dateProvider = { fixedDate }
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.isTodayCheckedIn)
+        assertFalse(state.showDailyCheckInDialog)
+        assertTrue(state.shouldPulseCheckInCard)
+    }
+
+    @Test
+    fun testDailyCheckInDialogNotShownWhenAlreadyCheckedIn() = runTest {
+        val promptManager = DailyCheckInPromptManager(dateProvider = { fixedDate })
+        val checkIn = CheckIn(
+            id = 1L,
+            checkInDate = fixedDate,
+            mood = 5,
+            energy = 4,
+            sleepDurationMinutes = 480,
+            note = "Feeling great!",
+            createdAt = Instant.now(),
+            updatedAt = Instant.now()
+        )
+        checkInRepository.saveCheckIn(checkIn)
+
+        viewModel = DashboardViewModel(
+            getTodayCheckInUseCase = GetTodayCheckInUseCase(checkInRepository),
+            getWeeklyAnalysisUseCase = GetWeeklyCheckInAnalysisUseCase(checkInRepository),
+            screeningRepository = fakeScreeningRepository,
+            promptManager = promptManager,
+            timeProvider = { morningTime },
+            dateProvider = { fixedDate }
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.isTodayCheckedIn)
+        assertFalse(state.showDailyCheckInDialog)
+        assertFalse(state.shouldPulseCheckInCard)
     }
 }

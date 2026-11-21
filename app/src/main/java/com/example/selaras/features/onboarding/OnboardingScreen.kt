@@ -226,17 +226,6 @@ fun OnboardingCarouselContent(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
-
-            if (!state.isLastSlide) {
-                TextButton(onClick = onSkip) {
-                    Text(
-                        text = "Lewati",
-                        color = OnboardingColors.TextSecondary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
         }
 
         Spacer(Modifier.height(24.dp))

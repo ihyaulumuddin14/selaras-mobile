@@ -22,6 +22,7 @@ import com.example.selaras.domain.repository.BreathingRepository
 import com.example.selaras.domain.repository.CheckInRepository
 import com.example.selaras.domain.repository.ScreeningRepository
 import com.example.selaras.domain.repository.SecurityRepository
+import com.example.selaras.features.dashboard.DailyCheckInPromptManager
 
 /**
  * Manual Dependency Injection container (ADR-011).
@@ -38,10 +39,15 @@ interface AppContainer {
     val checkInSyncManager: CheckInSyncManager
     val breathingSyncManager: BreathingSyncManager
     val appSettingsRepository: AppSettingsRepository
+    val dailyCheckInPromptManager: DailyCheckInPromptManager
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
     private val appContext = context.applicationContext
+
+    override val dailyCheckInPromptManager: DailyCheckInPromptManager by lazy {
+        DailyCheckInPromptManager.create(appContext)
+    }
 
     override val keyManager: KeyManager by lazy {
         KeyManager(appContext)

@@ -64,9 +64,15 @@ class CheckInViewModel(
         viewModelScope.launch {
             getTodayCheckInUseCase().collect { today ->
                 _uiState.update { state ->
+                    val shouldUpdateForm = state.isEditingToday && state.todayCheckIn == null && today != null
                     state.copy(
                         todayCheckIn = today,
-                        isAlreadyCheckedIn = today != null
+                        isAlreadyCheckedIn = today != null,
+                        formMood = if (shouldUpdateForm) today!!.mood else state.formMood,
+                        formEnergy = if (shouldUpdateForm) today!!.energy else state.formEnergy,
+                        formSleepHours = if (shouldUpdateForm) today!!.sleepHours else state.formSleepHours,
+                        formSleepMinutes = if (shouldUpdateForm) today!!.sleepRemainingMinutes else state.formSleepMinutes,
+                        formNote = if (shouldUpdateForm) today!!.note.orEmpty() else state.formNote
                     )
                 }
             }
@@ -151,16 +157,44 @@ class CheckInViewModel(
     }
 
     fun startEditToday() {
-        val today = _uiState.value.todayCheckIn ?: return
+        val today = _uiState.value.todayCheckIn
         _uiState.update {
             it.copy(
+                currentTab = CheckInTab.TODAY,
                 isEditingToday = true,
                 currentStep = CheckInStep.MOOD,
-                formMood = today.mood,
-                formEnergy = today.energy,
-                formSleepHours = today.sleepHours,
-                formSleepMinutes = today.sleepRemainingMinutes,
-                formNote = today.note.orEmpty(),
+                formMood = today?.mood ?: it.formMood,
+                formEnergy = today?.energy ?: it.formEnergy,
+                formSleepHours = today?.sleepHours ?: it.formSleepHours,
+                formSleepMinutes = today?.sleepRemainingMinutes ?: it.formSleepMinutes,
+                formNote = today?.note.orEmpty(),
+                errorMessage = null
+            )
+        }
+    }
+
+    /**
+     * Direct navigation shortcut to the 7-day weekly analysis tab from Dashboard.
+     */
+    fun navigateToWeeklyAnalysis() {
+        _uiState.update {
+            it.copy(
+                currentTab = CheckInTab.WEEKLY_ANALYSIS,
+                isEditingToday = false,
+                errorMessage = null
+            )
+        }
+    }
+
+    /**
+     * Direct navigation shortcut to start a new check-in wizard from Dashboard.
+     */
+    fun navigateToNewCheckIn() {
+        _uiState.update {
+            it.copy(
+                currentTab = CheckInTab.TODAY,
+                isEditingToday = false,
+                currentStep = CheckInStep.MOOD,
                 errorMessage = null
             )
         }
