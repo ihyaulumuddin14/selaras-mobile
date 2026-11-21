@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.core.ui.components.SelarasHeader
 
 /**
  * Screen for Counselor Summary generation and local PDF export (Figma 168:2333 - 168:2343).
@@ -49,67 +50,49 @@ fun CounselorSummaryScreen(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundCanvas)
-            .padding(horizontal = 20.dp)
-            .verticalScroll(rememberScrollState())
     ) {
-        Row(
+        SelarasHeader(
+            title = "Ringkasan Konselor",
+            onBack = onNavigateBack
+        )
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onNavigateBack),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Kembali",
-                    tint = pineGreen
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
             Text(
-                text = "Ringkasan Konselor",
-                fontSize = 20.sp,
+                text = "Kompilasi Data Observasi",
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = textPrimary
             )
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-        Text(
-            text = "Kompilasi Data Observasi",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = textPrimary
-        )
+            Text(
+                text = "Kompilasi data observasi 7 hari suasana hati dan tidur menjadi dokumen PDF lokal terstruktur untuk dibawa ke sesi konsultasi profesional.",
+                fontSize = 14.sp,
+                color = textSecondary,
+                lineHeight = 20.sp
+            )
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-        Text(
-            text = "Kompilasi data observasi 7 hari suasana hati dan tidur menjadi dokumen PDF lokal terstruktur untuk dibawa ke sesi konsultasi profesional.",
-            fontSize = 14.sp,
-            color = textSecondary,
-            lineHeight = 20.sp
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Button(
-            onClick = onNavigateBack,
-            shape = RoundedCornerShape(24.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = pineGreen,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) {
-            Text("Kembali ke Beranda")
+            Button(
+                onClick = onNavigateBack,
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = pineGreen,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Text("Kembali ke Beranda")
+            }
         }
     }
 }

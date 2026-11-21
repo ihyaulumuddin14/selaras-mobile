@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.core.ui.components.SelarasHeader
 import com.example.selaras.core.ui.components.SelarasIcons
 
 /**
@@ -58,26 +59,25 @@ fun HelpScreen(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundCanvas)
-            .padding(horizontal = 20.dp)
-            .verticalScroll(scrollState)
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Bantuan & Kontak Krisis",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = textPrimary
+        SelarasHeader(
+            title = "Bantuan & Kontak Krisis"
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .verticalScroll(scrollState)
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Kamu tidak sendiri. Bantuan profesional dan saluran krisis siap mendampingimu kapan saja.",
-            fontSize = 14.sp,
-            color = textSecondary,
-            lineHeight = 20.sp
-        )
+            Text(
+                text = "Kamu tidak sendiri. Bantuan profesional dan saluran krisis siap mendampingimu kapan saja.",
+                fontSize = 14.sp,
+                color = textSecondary,
+                lineHeight = 20.sp
+            )
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -229,6 +229,7 @@ fun HelpScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 

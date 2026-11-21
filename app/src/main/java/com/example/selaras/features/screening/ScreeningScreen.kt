@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.selaras.core.ui.components.SelarasHeader
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -59,26 +60,25 @@ fun ScreeningScreen(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundCanvas)
-            .padding(horizontal = 20.dp)
-            .verticalScroll(scrollState)
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Skrining PHQ-9",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = textPrimary
+        SelarasHeader(
+            title = "Skrining PHQ-9"
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .verticalScroll(scrollState)
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Kuesioner terstandarisasi 9 butir untuk mengevaluasi derajat kesehatan emosional dalam 2 minggu terakhir.",
-            fontSize = 14.sp,
-            color = textSecondary,
-            lineHeight = 20.sp
-        )
+            Text(
+                text = "Kuesioner terstandarisasi 9 butir untuk mengevaluasi derajat kesehatan emosional dalam 2 minggu terakhir.",
+                fontSize = 14.sp,
+                color = textSecondary,
+                lineHeight = 20.sp
+            )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -122,6 +122,7 @@ fun ScreeningScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 

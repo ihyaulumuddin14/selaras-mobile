@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.selaras.core.ui.components.SelarasHeader
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -52,26 +53,25 @@ fun HistoryScreen(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundCanvas)
-            .padding(horizontal = 20.dp)
-            .verticalScroll(scrollState)
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Riwayat Catatan",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = textPrimary
+        SelarasHeader(
+            title = "Riwayat Catatan"
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .verticalScroll(scrollState)
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Lihat rekapitulasi suasana hati, catatan harian, dan ringkasan konselor yang pernah kamu buat.",
-            fontSize = 14.sp,
-            color = textSecondary,
-            lineHeight = 20.sp
-        )
+            Text(
+                text = "Lihat rekapitulasi suasana hati, catatan harian, dan ringkasan konselor yang pernah kamu buat.",
+                fontSize = 14.sp,
+                color = textSecondary,
+                lineHeight = 20.sp
+            )
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -104,6 +104,7 @@ fun HistoryScreen(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 

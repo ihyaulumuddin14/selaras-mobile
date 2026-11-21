@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.core.ui.components.SelarasHeader
 import com.example.selaras.core.ui.components.SelarasIcons
 import com.example.selaras.features.breathing.BreathingColors
 
@@ -67,40 +68,21 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundCanvas)
-            .padding(horizontal = 20.dp)
-            .verticalScroll(scrollState)
     ) {
-        Row(
+        SelarasHeader(
+            title = "Pengaturan & Privasi",
+            onBack = onNavigateBack
+        )
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+                .verticalScroll(scrollState)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onNavigateBack),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Kembali",
-                    tint = pineGreen
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Pengaturan & Privasi",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = textPrimary
-            )
-        }
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Section 1: Keamanan & Kunci Aplikasi
+            // Section 1: Keamanan & Kunci Aplikasi
         Text(
             text = "Keamanan Aplikasi",
             fontSize = 16.sp,
@@ -258,4 +240,5 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
     }
+}
 }

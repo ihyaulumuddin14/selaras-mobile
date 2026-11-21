@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.core.ui.components.SelarasHeader
 import com.example.selaras.domain.model.CheckIn
 import com.example.selaras.domain.model.WeeklyCheckInAnalysis
 import java.time.format.DateTimeFormatter
@@ -55,7 +56,7 @@ fun CheckInScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header
-            CheckInHeader(
+            SelarasHeader(
                 title = "Check-in Harian",
                 onBack = onBack
             )
@@ -112,39 +113,6 @@ fun CheckInScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun CheckInHeader(
-    title: String,
-    onBack: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clickable(role = Role.Button, onClick = onBack),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Kembali",
-                tint = CheckInColors.Primary
-            )
-        }
-        Text(
-            text = title,
-            color = CheckInColors.TextPrimary,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp
-        )
     }
 }
 
