@@ -29,7 +29,7 @@ data class CounselorSummaryEntity(
     val id: Long = 0,
 
     @ColumnInfo(name = "screening_result_id")
-    val screeningResultId: Long,
+    val screeningResultId: Long? = null,
 
     @ColumnInfo(name = "period_start_date")
     val periodStartDate: LocalDate,

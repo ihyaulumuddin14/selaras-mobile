@@ -29,7 +29,7 @@ import com.example.selaras.data.local.entity.ScreeningResultEntity
         CustomBreathingPatternEntity::class,
         CounselorSummaryEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(
