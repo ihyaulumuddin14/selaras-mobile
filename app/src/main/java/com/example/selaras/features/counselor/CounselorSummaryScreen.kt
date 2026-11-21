@@ -56,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -449,7 +450,10 @@ private fun SelectContentScreen(
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(0.5f)
+            ,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -470,19 +474,10 @@ private fun SelectContentScreen(
                 Text(
                     text = "Analisis suasana hati, tidur, & energi (${uiState.recordedDays} dari ${uiState.totalDays} hari)",
                     fontSize = 12.sp,
-                    color = MutedGreenText
+                    color = MutedGreenText,
+                    lineHeight = 17.sp
                 )
             }
-            Text(
-                text = "Wajib",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = PineGreen,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.White)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
         }
     }
 

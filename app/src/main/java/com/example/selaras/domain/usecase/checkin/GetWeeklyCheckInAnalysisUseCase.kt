@@ -67,7 +67,7 @@ class GetWeeklyCheckInAnalysisUseCase(
             }
 
             if (isEligible) {
-                add("Data check-in telah mencapai $count hari (syarat min. 4 hari terpenuhi). Kamu dapat membuat Ringkasan Konselor (F4) kapan saja.")
+                add("Data check-in telah mencapai $count hari (syarat min. 4 hari terpenuhi). Kamu dapat membuat Ringkasan Konselor kapan saja.")
             } else {
                 val needed = 4 - count
                 add("Dibutuhkan $needed hari pencatatan lagi untuk membuka fitur Ringkasan Konselor.")
