@@ -433,7 +433,6 @@ fun InformedConsentContent(
                     .verticalScroll(scrollState)
             ) {
                 ConsentClauseCard(
-                    icon = "⚕️",
                     title = "Bukan Alat Diagnosis Medis",
                     content = "Selaras adalah sarana refleksi mandiri (*self-care companion*) dan penapisan awal. Selaras BUKAN pengganti diagnosis medis, pemeriksaan psikiatri, atau sesi psikoterapi formal dari tenaga kesehatan profesional berlisensi."
                 )
@@ -441,7 +440,6 @@ fun InformedConsentContent(
                 Spacer(Modifier.height(12.dp))
 
                 ConsentClauseCard(
-                    icon = "🔒",
                     title = "Kedaulatan Privasi & Enkripsi Lokal",
                     content = "Seluruh catatan suasana hati harian, durasi tidur, dan hasil penapisan depresi PHQ-9 Anda disimpan secara lokal pada perangkat dan dienkripsi penuh menggunakan AES-256 (SQLCipher). Data Anda tidak dijual kepada pihak ketiga."
                 )
@@ -449,7 +447,6 @@ fun InformedConsentContent(
                 Spacer(Modifier.height(12.dp))
 
                 ConsentClauseCard(
-                    icon = "🆘",
                     title = "Bantuan Krisis & Kontak Darurat",
                     content = "Jika Anda mengalami krisis psikologis hebat atau memiliki dorongan untuk menyakiti diri sendiri, segera hubungi Layanan Darurat Kesehatan Jiwa Kemenkes (Hotline 119 ext 8) atau segera kunjungi instalasi gawat darurat rumah sakit terdekat."
                 )
@@ -518,7 +515,6 @@ fun InformedConsentContent(
 
 @Composable
 private fun ConsentClauseCard(
-    icon: String = "⚕️",
     title: String,
     content: String
 ) {
@@ -530,7 +526,6 @@ private fun ConsentClauseCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = icon, fontSize = 20.sp)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = title,
