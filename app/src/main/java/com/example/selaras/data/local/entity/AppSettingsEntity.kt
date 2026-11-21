@@ -27,6 +27,9 @@ data class AppSettingsEntity(
     @ColumnInfo(name = "checkin_reminder_time")
     val checkinReminderTime: LocalTime? = null,
 
+    @ColumnInfo(name = "user_name")
+    val userName: String? = null,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Instant,
 

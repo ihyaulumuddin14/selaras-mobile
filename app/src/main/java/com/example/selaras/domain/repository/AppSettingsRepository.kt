@@ -11,4 +11,5 @@ interface AppSettingsRepository {
     suspend fun acceptConsent(): Result<Unit>
     suspend fun completeOnboarding(): Result<Unit>
     suspend fun setCheckInReminder(enabled: Boolean, time: LocalTime?): Result<Unit>
+    suspend fun updateUserName(name: String?): Result<Unit>
 }

@@ -277,6 +277,111 @@ class CounselorSummaryTest {
         assertTrue(state.isTodayCheckedIn)
     }
 
+    @Test
+    fun `setupDummyDataForExportPdf sets up eligible state with 5 recorded days`() {
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        vm.setupDummyDataForExportPdf()
+        val state = vm.uiState.value
+        assertEquals(CounselorScreenState.SELECT_CONTENT, state.screenState)
+        assertEquals(5, state.recordedDays)
+        assertEquals(7, state.totalDays)
+        assertEquals(3.4, state.avgMood, 0.1)
+        assertEquals(6.8, state.avgSleepHours, 0.1)
+        assertEquals(6.0, state.avgEnergy, 0.1)
+        // Dummy data contains 9 screenings and 9 notes, with different created_at
+        assertEquals(9, state.availableScreenings.size)
+        assertEquals(9, state.availableNotes.size)
+        assertTrue(state.includePersonalNotes)
+
+        // When creating summary, fallback generates valid dummy summary for export
+        vm.createSummary()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(CounselorScreenState.PREVIEW, vm.uiState.value.screenState)
+        assertTrue(vm.uiState.value.createdSummary != null)
+    }
+
+    @Test
+    fun `screenings limited to 7 newest based on createdAt`() = runBlocking {
+        val today = LocalDate.now()
+        val now = java.time.Instant.now()
+
+        // Seed 10 screenings with different createdAt
+        for (i in 0..9) {
+            fakeScreeningRepository.submitScreening(
+                ScreeningResult(
+                    id = (i + 1).toLong(),
+                    screeningType = ScreeningType.MANUAL,
+                    periodStartDate = today.minusDays(10),
+                    periodEndDate = today,
+                    instrumentVersion = "PHQ-9",
+                    totalScore = 5 + i,
+                    category = ScreeningCategory.MINIMAL,
+                    helpIndicator = false,
+                    createdAt = now.minusSeconds((10 - i) * 1000L) // i=9 is newest
+                ),
+                emptyList()
+            )
+        }
+
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        vm.loadRealData()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val screenings = vm.uiState.value.availableScreenings
+        assertEquals(7, screenings.size)
+        // The newest item (i=9, totalScore=14) should be first
+        assertEquals(14, screenings.first().score)
+    }
+
+    @Test
+    fun `notes limited to 7 newest based on createdAt`() = runBlocking {
+        val today = LocalDate.now()
+        val now = java.time.Instant.now()
+
+        // Seed 10 check-ins with notes within observation period and different createdAt
+        for (i in 0..9) {
+            fakeCheckInRepository.saveCheckIn(
+                CheckIn(
+                    id = (i + 1).toLong(),
+                    checkInDate = today.minusDays((i % 5).toLong()),
+                    mood = 3,
+                    energy = 5,
+                    sleepDurationMinutes = 400,
+                    note = "Catatan $i",
+                    createdAt = now.minusSeconds((10 - i) * 1000L) // i=9 is newest
+                )
+            )
+        }
+
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        vm.loadRealData()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val notes = vm.uiState.value.availableNotes
+        assertEquals(7, notes.size)
+        // The newest item (i=9, note="Catatan 9") should be first
+        assertEquals("Catatan 9", notes.first().noteText)
+    }
+
     // Fake Repositories
     private class FakeCheckInRepo : CheckInRepository {
         val checkIns = mutableListOf<CheckIn>()

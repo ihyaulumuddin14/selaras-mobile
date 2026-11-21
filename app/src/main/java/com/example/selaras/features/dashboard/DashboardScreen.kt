@@ -66,7 +66,8 @@ fun DashboardScreen(
         DashboardHeader(
             greeting = state.greeting,
             formattedDate = state.formattedDate,
-            onNavigateToSettings = onNavigateToSettings
+            onNavigateToSettings = onNavigateToSettings,
+            hasSettingsBadge = !state.isNameSet
         )
 
         Column(

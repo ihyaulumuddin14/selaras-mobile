@@ -293,13 +293,14 @@ private fun AlreadyCheckedInView(
 
                     if (!today.note.isNullOrBlank()) {
                         HorizontalDivider(Modifier.padding(vertical = 10.dp), color = CheckInColors.CardBorder)
-                        Text("Catatan Refleksi:", fontSize = 13.sp, color = CheckInColors.TextSecondary)
+                        Text("Catatan Refleksi:", fontSize = 13.sp, color = CheckInColors.TextSecondary, lineHeight = 17.sp
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = today.note,
                             fontSize = 14.sp,
                             color = CheckInColors.TextPrimary,
-                            lineHeight = 20.sp
+                            lineHeight = 17.sp
                         )
                     }
                 }

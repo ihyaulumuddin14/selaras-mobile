@@ -3,6 +3,7 @@ package com.example.selaras.features.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.selaras.domain.repository.AppSettingsRepository
 import com.example.selaras.domain.repository.CheckInRepository
 import com.example.selaras.domain.repository.ScreeningRepository
 import com.example.selaras.domain.usecase.checkin.GetTodayCheckInUseCase
@@ -24,6 +25,7 @@ class DashboardViewModel(
     private val getWeeklyAnalysisUseCase: GetWeeklyCheckInAnalysisUseCase,
     private val screeningRepository: ScreeningRepository,
     private val promptManager: DailyCheckInPromptManager? = null,
+    private val appSettingsRepository: AppSettingsRepository? = null,
     private val timeProvider: () -> LocalTime = { LocalTime.now() },
     private val dateProvider: () -> LocalDate = { LocalDate.now() }
 ) : ViewModel() {
@@ -50,9 +52,12 @@ class DashboardViewModel(
         val alreadyPrompted = promptManager?.hasPromptedToday() ?: true
         val showDialog = !isCheckedIn && !alreadyPrompted
         val shouldPulse = !isCheckedIn && alreadyPrompted
+        val name = _uiState.value.userName
+        val baseGreeting = computeGreeting(nowTime)
+        val greeting = if (!name.isNullOrBlank()) "$baseGreeting, $name" else baseGreeting
         _uiState.update {
             it.copy(
-                greeting = computeGreeting(nowTime),
+                greeting = greeting,
                 formattedDate = formatDateIndonesian(nowDate),
                 showDailyCheckInDialog = showDialog,
                 shouldPulseCheckInCard = shouldPulse
@@ -143,6 +148,28 @@ class DashboardViewModel(
                     }
                 }
         }
+
+        // 4. Observe AppSettings for User Name (Welcoming & Settings notification badge)
+        appSettingsRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.getSettingsFlow()
+                    .catch { /* Non-critical if empty */ }
+                    .collect { settings ->
+                        val name = settings?.userName?.trim()
+                        val isSet = !name.isNullOrBlank()
+                        val nowTime = timeProvider()
+                        val baseGreeting = computeGreeting(nowTime)
+                        val personalizedGreeting = if (isSet) "$baseGreeting, $name" else baseGreeting
+                        _uiState.update { current ->
+                            current.copy(
+                                userName = name,
+                                isNameSet = isSet,
+                                greeting = personalizedGreeting
+                            )
+                        }
+                    }
+            }
+        }
     }
 
     companion object {
@@ -192,7 +219,8 @@ class DashboardViewModel(
     class Factory(
         private val checkInRepository: CheckInRepository,
         private val screeningRepository: ScreeningRepository,
-        private val promptManager: DailyCheckInPromptManager? = null
+        private val promptManager: DailyCheckInPromptManager? = null,
+        private val appSettingsRepository: AppSettingsRepository? = null
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(DashboardViewModel::class.java))
@@ -203,7 +231,8 @@ class DashboardViewModel(
                 getTodayCheckInUseCase = todayUseCase,
                 getWeeklyAnalysisUseCase = weeklyUseCase,
                 screeningRepository = screeningRepository,
-                promptManager = promptManager
+                promptManager = promptManager,
+                appSettingsRepository = appSettingsRepository
             ) as T
         }
     }
