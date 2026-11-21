@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -110,6 +112,10 @@ fun CounselorSummaryScreen(
     }
 
     val uiState by effectiveViewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        effectiveViewModel.loadRealData()
+    }
 
     val headerTitle = when (uiState.screenState) {
         CounselorScreenState.SELECT_CONTENT,
@@ -276,7 +282,10 @@ private fun SelectContentScreen(
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(0.5f)
+            ,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -297,19 +306,10 @@ private fun SelectContentScreen(
                 Text(
                     text = "Analisis suasana hati, tidur, & energi (${uiState.recordedDays} dari ${uiState.totalDays} hari)",
                     fontSize = 12.sp,
-                    color = MutedGreenText
+                    color = MutedGreenText,
+                    lineHeight = 17.sp
                 )
             }
-            Text(
-                text = "Wajib",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = PineGreen,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.White)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
         }
     }
 
@@ -353,47 +353,52 @@ private fun SelectContentScreen(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
+    val selectedNotesCount = uiState.availableNotes.count { it.isSelected }
+
     // Master Toggle Checkbox for Personal Notes
     CleanSelectableItem(
         checked = uiState.includePersonalNotes,
         onCheckedChange = onToggleIncludeNotes,
         title = "Sertakan Catatan Pribadi",
-        badgeText = if (uiState.includePersonalNotes) "Aktif — Pilih catatan di bawah" else "Nonaktif"
+        badgeText = when {
+            selectedNotesCount > 0 -> "Aktif ($selectedNotesCount dipilih)"
+            uiState.includePersonalNotes -> "Aktif"
+            else -> "Nonaktif"
+        }
     )
 
-    if (uiState.includePersonalNotes) {
+    if (uiState.availableNotes.isNotEmpty()) {
         Spacer(modifier = Modifier.height(8.dp))
         Column(modifier = Modifier.padding(start = 16.dp)) {
-            if (uiState.availableNotes.isEmpty()) {
-                Text(
-                    text = "Tidak ada catatan refleksi pada periode ini.",
-                    fontSize = 12.sp,
-                    color = MutedGreenText
+            uiState.availableNotes.forEach { noteItem ->
+                CleanSelectableItem(
+                    checked = noteItem.isSelected,
+                    onCheckedChange = { onToggleNote(noteItem.date, it) },
+                    title = noteItem.title,
+                    onInfoClick = { selectedNoteForInfo = noteItem }
                 )
-            } else {
-                uiState.availableNotes.forEach { noteItem ->
-                    CleanSelectableItem(
-                        checked = noteItem.isSelected,
-                        onCheckedChange = { onToggleNote(noteItem.date, it) },
-                        title = noteItem.title,
-                        onInfoClick = { selectedNoteForInfo = noteItem }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    } else {
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Tidak ada catatan refleksi pada periode ini.",
+            fontSize = 12.sp,
+            color = MutedGreenText,
+            modifier = Modifier.padding(start = 16.dp)
+        )
     }
 
     Spacer(modifier = Modifier.height(20.dp))
-    PrimaryButton(text = "Buat Ringkasan Mingguan (PDF)", onClick = onCreateSummary)
-
-    Spacer(modifier = Modifier.height(12.dp))
     Text(
         text = "*Membuat ringkasan tidak mengurangi kuota skrining berkala.",
         fontSize = 11.sp,
         color = MutedGreenText,
         lineHeight = 16.sp
     )
+    Spacer(modifier = Modifier.height(16.dp))
+    PrimaryButton(text = "Buat Ringkasan Mingguan (PDF)", onClick = onCreateSummary)
     Spacer(modifier = Modifier.height(16.dp))
     OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 
