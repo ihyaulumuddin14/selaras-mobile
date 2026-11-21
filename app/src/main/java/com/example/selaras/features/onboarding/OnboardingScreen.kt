@@ -1,9 +1,15 @@
 package com.example.selaras.features.onboarding
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,85 +71,61 @@ fun OnboardingScreen(
             .safeDrawingPadding(),
         color = OnboardingColors.Background
     ) {
-        when (state.currentDestination) {
-            OnboardingDestination.SPLASH -> {
-                SplashScreen(
-                    onCheckLaunchState = {
-                        viewModel.checkAppLaunchState(forceOnboarding = forceShowOnboarding)
-                    }
-                )
-            }
-            OnboardingDestination.ONBOARDING_CAROUSEL -> {
-                BackHandler(enabled = state.carouselIndex > 0) {
-                    viewModel.prevSlide()
-                }
-                OnboardingCarouselContent(
-                    state = state,
-                    slides = viewModel.slides,
-                    onNext = viewModel::nextSlide,
-                    onPrev = viewModel::prevSlide,
-                    onSkip = viewModel::skipToConsent,
-                    onDotClick = viewModel::setSlideIndex
-                )
-            }
-            OnboardingDestination.INFORMED_CONSENT -> {
-                BackHandler {
-                    viewModel.backToCarousel()
-                }
-                InformedConsentContent(
-                    state = state,
-                    onConsentChange = viewModel::setConsentChecked,
-                    onSubmitConsent = { viewModel.submitConsentAndComplete() },
-                    onBackToCarousel = viewModel::backToCarousel
-                )
-            }
-            OnboardingDestination.NAVIGATE_TO_DASHBOARD,
-            OnboardingDestination.NAVIGATE_TO_APP_LOCK -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
-                        border = BorderStroke(1.dp, OnboardingColors.CardBorder)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("🌿", fontSize = 48.sp)
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                text = "Orientasi & Persetujuan Selesai!",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = OnboardingColors.TextPrimary,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "Status informed consent telah berhasil disimpan ke database lokal terenkripsi.",
-                                fontSize = 14.sp,
-                                color = OnboardingColors.TextSecondary,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 20.sp
-                            )
-                            Spacer(Modifier.height(24.dp))
-                            Button(
-                                onClick = { viewModel.restartForTesting() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
-                            ) {
-                                Text("Ulangi Tes Splash & Onboarding", fontWeight = FontWeight.SemiBold)
-                            }
+        AnimatedContent(
+            targetState = state.currentDestination,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(320, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { it / 3 })
+                    .togetherWith(
+                        fadeOut(animationSpec = tween(250, easing = FastOutSlowInEasing)) +
+                            slideOutHorizontally(animationSpec = tween(250, easing = FastOutSlowInEasing)) { -it / 3 }
+                    )
+            },
+            label = "OnboardingDestinationTransition",
+            modifier = Modifier.fillMaxSize()
+        ) { destination ->
+            when (destination) {
+                OnboardingDestination.SPLASH -> {
+                    SplashScreen(
+                        onCheckLaunchState = {
+                            viewModel.checkAppLaunchState(forceOnboarding = forceShowOnboarding)
                         }
+                    )
+                }
+                OnboardingDestination.ONBOARDING_CAROUSEL -> {
+                    BackHandler(enabled = state.carouselIndex > 0) {
+                        viewModel.prevSlide()
+                    }
+                    OnboardingCarouselContent(
+                        state = state,
+                        slides = viewModel.slides,
+                        onNext = viewModel::nextSlide,
+                        onPrev = viewModel::prevSlide,
+                        onSkip = viewModel::skipToConsent,
+                        onDotClick = viewModel::setSlideIndex
+                    )
+                }
+                OnboardingDestination.INFORMED_CONSENT -> {
+                    BackHandler {
+                        viewModel.backToCarousel()
+                    }
+                    InformedConsentContent(
+                        state = state,
+                        onConsentChange = viewModel::setConsentChecked,
+                        onSubmitConsent = { viewModel.submitConsentAndComplete() },
+                        onBackToCarousel = viewModel::backToCarousel
+                    )
+                }
+                OnboardingDestination.NAVIGATE_TO_DASHBOARD,
+                OnboardingDestination.NAVIGATE_TO_APP_LOCK -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = OnboardingColors.Primary,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
                 }
             }

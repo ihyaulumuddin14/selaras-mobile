@@ -1,6 +1,14 @@
 package com.example.selaras.features.security
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -44,8 +52,20 @@ fun AppLockMasterScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        when (state.pinStep) {
+    AnimatedContent(
+        targetState = state.pinStep,
+        transitionSpec = {
+            (fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing)) +
+                slideInHorizontally(animationSpec = tween(300, easing = FastOutSlowInEasing)) { it / 4 })
+                .togetherWith(
+                    fadeOut(animationSpec = tween(250, easing = FastOutSlowInEasing)) +
+                        slideOutHorizontally(animationSpec = tween(250, easing = FastOutSlowInEasing)) { -it / 4 }
+                )
+        },
+        label = "AppLockStepTransition",
+        modifier = modifier.fillMaxSize()
+    ) { step ->
+        when (step) {
             PinStep.ENTER_PIN -> {
                 AppLockScreen(
                     state = state,

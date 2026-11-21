@@ -3,6 +3,13 @@ package com.example.selaras.core.navigation
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +34,8 @@ import com.example.selaras.features.dashboard.DashboardViewModel
 import com.example.selaras.features.help.HelpScreen
 import com.example.selaras.features.history.HistoryScreen
 import com.example.selaras.features.screening.ScreeningScreen
+import com.example.selaras.features.security.AppLockMasterScreen
+import com.example.selaras.features.security.AppLockViewModel
 import com.example.selaras.features.settings.SettingsScreen
 
 /**
@@ -36,7 +45,8 @@ enum class SubDestination {
     NONE,
     BREATHING,
     COUNSELOR_SUMMARY,
-    SETTINGS
+    SETTINGS,
+    PIN_SETUP
 }
 
 /**
@@ -51,6 +61,8 @@ fun AppNavigation(
     dashboardViewModel: DashboardViewModel,
     checkInViewModel: CheckInViewModel,
     breathingViewModel: BreathingViewModel,
+    appLockViewModel: AppLockViewModel? = null,
+    onResetToOnboarding: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var currentTab by remember { mutableStateOf(NavTab.HOME) }
@@ -97,64 +109,138 @@ fun AppNavigation(
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
         ) {
-            when (subDestination) {
-                SubDestination.BREATHING -> {
-                    BreathingScreen(
-                        viewModel = breathingViewModel,
-                        onExit = { subDestination = SubDestination.NONE }
-                    )
-                }
+            AnimatedContent(
+                targetState = subDestination,
+                transitionSpec = {
+                    if (targetState != SubDestination.NONE) {
+                        (slideIntoContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                            animationSpec = tween(320, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(320))).togetherWith(
+                            slideOutOfContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.Left,
+                                animationSpec = tween(280, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(220))
+                        )
+                    } else {
+                        (slideIntoContainer(
+                            towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(320, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(320))).togetherWith(
+                            slideOutOfContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.Right,
+                                animationSpec = tween(280, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(220))
+                        )
+                    }
+                },
+                label = "SubDestinationTransition",
+                modifier = Modifier.fillMaxSize()
+            ) { destination ->
+                when (destination) {
+                    SubDestination.BREATHING -> {
+                        BreathingScreen(
+                            viewModel = breathingViewModel,
+                            onExit = { subDestination = SubDestination.NONE }
+                        )
+                    }
 
-                SubDestination.COUNSELOR_SUMMARY -> {
-                    CounselorSummaryScreen(
-                        onNavigateBack = { subDestination = SubDestination.NONE }
-                    )
-                }
+                    SubDestination.COUNSELOR_SUMMARY -> {
+                        CounselorSummaryScreen(
+                            onNavigateBack = { subDestination = SubDestination.NONE }
+                        )
+                    }
 
-                SubDestination.SETTINGS -> {
-                    SettingsScreen(
-                        onNavigateBack = { subDestination = SubDestination.NONE },
-                        onResetPin = { /* Handled via Settings or AppLock */ },
-                        onDeleteAllData = { /* Handled via Settings */ }
-                    )
-                }
+                    SubDestination.SETTINGS -> {
+                        SettingsScreen(
+                            isPinSet = container.securityRepository.isPinSet(),
+                            onNavigateBack = { subDestination = SubDestination.NONE },
+                            onResetPin = {
+                                if (appLockViewModel != null) {
+                                    if (container.securityRepository.isPinSet()) {
+                                        appLockViewModel.switchToRecoveryMode()
+                                    } else {
+                                        appLockViewModel.switchToSetupMode()
+                                    }
+                                    subDestination = SubDestination.PIN_SETUP
+                                }
+                            },
+                            onDeleteAllData = onResetToOnboarding
+                        )
+                    }
 
-                SubDestination.NONE -> {
-                    when (currentTab) {
-                        NavTab.HOME -> {
-                            DashboardScreen(
-                                viewModel = dashboardViewModel,
-                                onNavigateToCheckIn = { currentTab = NavTab.CHECK_IN },
-                                onNavigateToBreathing = { subDestination = SubDestination.BREATHING },
-                                onNavigateToScreening = { currentTab = NavTab.SCREENING },
-                                onNavigateToCounselorSummary = { subDestination = SubDestination.COUNSELOR_SUMMARY },
-                                onNavigateToSettings = { subDestination = SubDestination.SETTINGS },
-                                onNavigateToHelp = { currentTab = NavTab.HELP }
+                    SubDestination.PIN_SETUP -> {
+                        if (appLockViewModel != null) {
+                            AppLockMasterScreen(
+                                viewModel = appLockViewModel,
+                                onUnlockSuccess = { subDestination = SubDestination.SETTINGS },
+                                onSetupComplete = { subDestination = SubDestination.SETTINGS },
+                                onBackToPrevious = { subDestination = SubDestination.SETTINGS }
                             )
+                        } else {
+                            subDestination = SubDestination.SETTINGS
                         }
+                    }
 
-                        NavTab.CHECK_IN -> {
-                            CheckInScreen(
-                                viewModel = checkInViewModel,
-                                onBack = { currentTab = NavTab.HOME }
-                            )
-                        }
+                    SubDestination.NONE -> {
+                        AnimatedContent(
+                            targetState = currentTab,
+                            transitionSpec = {
+                                val direction = if (targetState.ordinal > initialState.ordinal) {
+                                    AnimatedContentTransitionScope.SlideDirection.Left
+                                } else {
+                                    AnimatedContentTransitionScope.SlideDirection.Right
+                                }
+                                (slideIntoContainer(
+                                    towards = direction,
+                                    animationSpec = tween(280, easing = FastOutSlowInEasing)
+                                ) + fadeIn(animationSpec = tween(280))).togetherWith(
+                                    slideOutOfContainer(
+                                        towards = direction,
+                                        animationSpec = tween(280, easing = FastOutSlowInEasing)
+                                    ) + fadeOut(animationSpec = tween(200))
+                                )
+                            },
+                            label = "NavTabTransition",
+                            modifier = Modifier.fillMaxSize()
+                        ) { tab ->
+                            when (tab) {
+                                NavTab.HOME -> {
+                                    DashboardScreen(
+                                        viewModel = dashboardViewModel,
+                                        onNavigateToCheckIn = { currentTab = NavTab.CHECK_IN },
+                                        onNavigateToBreathing = { subDestination = SubDestination.BREATHING },
+                                        onNavigateToScreening = { currentTab = NavTab.SCREENING },
+                                        onNavigateToCounselorSummary = { subDestination = SubDestination.COUNSELOR_SUMMARY },
+                                        onNavigateToSettings = { subDestination = SubDestination.SETTINGS },
+                                        onNavigateToHelp = { currentTab = NavTab.HELP }
+                                    )
+                                }
 
-                        NavTab.SCREENING -> {
-                            ScreeningScreen(
-                                onStartScreening = { /* Ready for PHQ-9 Question flow */ }
-                            )
-                        }
+                                NavTab.CHECK_IN -> {
+                                    CheckInScreen(
+                                        viewModel = checkInViewModel,
+                                        onBack = { currentTab = NavTab.HOME }
+                                    )
+                                }
 
-                        NavTab.HISTORY -> {
-                            HistoryScreen(
-                                onNavigateToCheckInHistory = { currentTab = NavTab.CHECK_IN },
-                                onNavigateToCounselorPdf = { subDestination = SubDestination.COUNSELOR_SUMMARY }
-                            )
-                        }
+                                NavTab.SCREENING -> {
+                                    ScreeningScreen(
+                                        onStartScreening = { /* Ready for PHQ-9 Question flow */ }
+                                    )
+                                }
 
-                        NavTab.HELP -> {
-                            HelpScreen()
+                                NavTab.HISTORY -> {
+                                    HistoryScreen(
+                                        onNavigateToCheckInHistory = { currentTab = NavTab.CHECK_IN },
+                                        onNavigateToCounselorPdf = { subDestination = SubDestination.COUNSELOR_SUMMARY }
+                                    )
+                                }
+
+                                NavTab.HELP -> {
+                                    HelpScreen()
+                                }
+                            }
                         }
                     }
                 }

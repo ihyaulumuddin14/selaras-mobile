@@ -119,6 +119,21 @@ class OnboardingViewModel(
         }
     }
 
+    /**
+     * Resets the onboarding state back to slide 1 of the carousel (used when clearing all data).
+     */
+    fun resetToOnboarding() {
+        _uiState.value = OnboardingUiState(
+            currentDestination = OnboardingDestination.ONBOARDING_CAROUSEL,
+            carouselIndex = 0,
+            isConsentChecked = false,
+            isConsentAccepted = false,
+            isOnboardingCompleted = false,
+            isLoading = false,
+            errorMessage = null
+        )
+    }
+
     fun nextSlide() {
         val current = _uiState.value.carouselIndex
         if (current < _uiState.value.totalSlides - 1) {

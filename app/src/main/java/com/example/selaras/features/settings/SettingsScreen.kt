@@ -20,7 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
@@ -48,6 +50,7 @@ import com.example.selaras.features.breathing.BreathingColors
  */
 @Composable
 fun SettingsScreen(
+    isPinSet: Boolean = false,
     onNavigateBack: () -> Unit = {},
     onResetPin: () -> Unit = {},
     onDeleteAllData: () -> Unit = {},
@@ -63,6 +66,7 @@ fun SettingsScreen(
     val errorRed = Color(0xFFB3261E)
 
     var isReminderEnabled by remember { mutableStateOf(true) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -113,9 +117,9 @@ fun SettingsScreen(
                         color = textPrimary
                     )
                     Text(
-                        text = "Status: Aktif & Terlindungi",
+                        text = if (isPinSet) "Status: Aktif & Terlindungi" else "Status: Belum Diatur",
                         fontSize = 12.sp,
-                        color = pineGreen
+                        color = if (isPinSet) pineGreen else textSecondary
                     )
                 }
 
@@ -128,7 +132,7 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.height(34.dp)
                 ) {
-                    Text("Ubah PIN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(if (isPinSet) "Ubah PIN" else "Atur PIN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -222,7 +226,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             Button(
-                onClick = onDeleteAllData,
+                onClick = { showDeleteDialog = true },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = errorRed,
                     contentColor = Color.White
@@ -236,6 +240,43 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = {
+                    Text(
+                        text = "Hapus Seluruh Data?",
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimary
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Tindakan ini akan menghapus seluruh catatan check-in, pola pernapasan kustom, hasil skrining, serta PIN keamanan secara permanen. Aplikasi akan kembali ke tahap orientasi awal.",
+                        fontSize = 14.sp,
+                        color = textSecondary,
+                        lineHeight = 20.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteDialog = false
+                            onDeleteAllData()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = errorRed)
+                    ) {
+                        Text("Ya, Hapus Semua", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) {
+                        Text("Batal", color = textSecondary)
+                    }
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(32.dp))
