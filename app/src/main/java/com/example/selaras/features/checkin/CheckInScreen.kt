@@ -24,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.selaras.core.ui.components.SelarasHeader
 import com.example.selaras.domain.model.CheckIn
+import com.example.selaras.domain.model.MoodTrend
 import com.example.selaras.domain.model.WeeklyCheckInAnalysis
+import com.example.selaras.features.checkin.components.WeeklyPatternChart
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -1046,45 +1049,76 @@ private fun WeeklyAnalysisTabContent(
     analysis: WeeklyCheckInAnalysis?,
     onStartCheckIn: () -> Unit
 ) {
-    if (analysis == null || !analysis.hasData) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text("📊", fontSize = 48.sp)
-            Spacer(Modifier.height(14.dp))
-            Text(
-                text = "Belum Ada Catatan 7 Hari Ini",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = CheckInColors.TextPrimary
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Catat kondisi harianmu minimal beberapa hari untuk melihat deteksi pola suasana hati, energi, dan tidur.",
-                fontSize = 14.sp,
-                color = CheckInColors.TextSecondary,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(20.dp))
-            Button(
-                onClick = onStartCheckIn,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
-            ) {
-                Text("Mulai Catat Hari Ini")
-            }
+    val activeAnalysis = analysis ?: remember {
+        val today = LocalDate.now()
+        WeeklyCheckInAnalysis(
+            startDate = today.minusDays(6),
+            endDate = today,
+            entries = emptyList(),
+            totalDaysRecorded = 0,
+            averageMood = 0.0,
+            averageEnergy = 0.0,
+            averageSleepMinutes = 0,
+            moodTrend = MoodTrend.INSUFFICIENT_DATA,
+            isEligibleForCounselorSummary = false,
+            insights = emptyList()
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 1. Weekly Trend Pattern Chart (grafik_pola.png - 7 Day Range)
+        item {
+            WeeklyPatternChart(analysis = activeAnalysis)
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+
+        if (!activeAnalysis.hasData) {
+            // Empty State Notice below Chart
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CheckInColors.Surface),
+                    border = BorderStroke(1.dp, CheckInColors.CardBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("📊", fontSize = 36.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "Belum Ada Catatan 7 Hari Ini",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CheckInColors.TextPrimary
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Grafik di atas akan otomatis menampilkan kurva tren suasana hati, tingkat energi, dan durasi tidur seiring kamu mencatat check-in harianmu.",
+                            fontSize = 13.sp,
+                            color = CheckInColors.TextSecondary,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = onStartCheckIn,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CheckInColors.Primary)
+                        ) {
+                            Text("Mulai Catat Hari Ini", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        } else {
             item {
                 Text(
                     text = "Ringkasan 7 Hari Terakhir",
@@ -1093,7 +1127,7 @@ private fun WeeklyAnalysisTabContent(
                     color = CheckInColors.TextPrimary
                 )
                 Text(
-                    text = "${analysis.startDate} s.d. ${analysis.endDate} (${analysis.totalDaysRecorded} hari terdata)",
+                    text = "${activeAnalysis.startDate} s.d. ${activeAnalysis.endDate} (${activeAnalysis.totalDaysRecorded} hari terdata)",
                     fontSize = 13.sp,
                     color = CheckInColors.TextSecondary
                 )
@@ -1107,19 +1141,19 @@ private fun WeeklyAnalysisTabContent(
                 ) {
                     StatCard(
                         title = "Rata-rata Mood",
-                        value = "${analysis.averageMood} / 5.0",
+                        value = "${activeAnalysis.averageMood} / 5.0",
                         subtitle = "Skala emosi",
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         title = "Rata-rata Energi",
-                        value = "${analysis.averageEnergy} / 10",
+                        value = "${activeAnalysis.averageEnergy} / 10",
                         subtitle = "Level energi",
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
                         title = "Rata-rata Tidur",
-                        value = "${analysis.averageSleepHours} jam",
+                        value = "${activeAnalysis.averageSleepHours} jam",
                         subtitle = "Istirahat malam",
                         modifier = Modifier.weight(1f)
                     )
@@ -1131,14 +1165,14 @@ private fun WeeklyAnalysisTabContent(
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (analysis.isEligibleForCounselorSummary)
+                        containerColor = if (activeAnalysis.isEligibleForCounselorSummary)
                             CheckInColors.PrimaryContainer
                         else
                             CheckInColors.Surface
                     ),
                     border = BorderStroke(
                         1.dp,
-                        if (analysis.isEligibleForCounselorSummary) CheckInColors.Primary else CheckInColors.CardBorder
+                        if (activeAnalysis.isEligibleForCounselorSummary) CheckInColors.Primary else CheckInColors.CardBorder
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1147,15 +1181,15 @@ private fun WeeklyAnalysisTabContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (analysis.isEligibleForCounselorSummary) "✓" else "ℹ",
+                            text = if (activeAnalysis.isEligibleForCounselorSummary) "✓" else "ℹ",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (analysis.isEligibleForCounselorSummary) CheckInColors.Primary else CheckInColors.Warning
+                            color = if (activeAnalysis.isEligibleForCounselorSummary) CheckInColors.Primary else CheckInColors.Warning
                         )
                         Spacer(Modifier.width(14.dp))
                         Column {
                             Text(
-                                text = if (analysis.isEligibleForCounselorSummary)
+                                text = if (activeAnalysis.isEligibleForCounselorSummary)
                                     "Syarat Ringkasan Konselor (F4) Terpenuhi"
                                 else
                                     "Menuju Kelayakan Ringkasan Konselor (F4)",
@@ -1164,10 +1198,10 @@ private fun WeeklyAnalysisTabContent(
                                 color = CheckInColors.TextPrimary
                             )
                             Text(
-                                text = if (analysis.isEligibleForCounselorSummary)
-                                    "Tersedia ${analysis.totalDaysRecorded} hari data (minimal 4 hari). Berkas PDF siap dibuat."
+                                text = if (activeAnalysis.isEligibleForCounselorSummary)
+                                    "Tersedia ${activeAnalysis.totalDaysRecorded} hari data (minimal 4 hari). Berkas PDF siap dibuat."
                                 else
-                                    "Butuh ${4 - analysis.totalDaysRecorded} hari pencatatan lagi untuk mencapai syarat minimal 4 hari.",
+                                    "Butuh ${4 - activeAnalysis.totalDaysRecorded} hari pencatatan lagi untuk mencapai syarat minimal 4 hari.",
                                 fontSize = 12.sp,
                                 color = CheckInColors.TextSecondary
                             )
@@ -1192,7 +1226,7 @@ private fun WeeklyAnalysisTabContent(
                             color = CheckInColors.TextPrimary
                         )
                         Spacer(Modifier.height(10.dp))
-                        analysis.insights.forEach { insight ->
+                        activeAnalysis.insights.forEach { insight ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
