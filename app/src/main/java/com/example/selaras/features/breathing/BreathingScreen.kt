@@ -2,7 +2,6 @@ package com.example.selaras.features.breathing
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,7 +19,7 @@ fun BreathingScreen(
         if (state.page == BreathingPage.CATALOG) onExit() else viewModel.goBack()
     }
     Surface(
-        modifier = Modifier.fillMaxSize().safeDrawingPadding(),
+        modifier = Modifier.fillMaxSize(),
         color = BreathingColors.Background
     ) {
         when (state.page) {

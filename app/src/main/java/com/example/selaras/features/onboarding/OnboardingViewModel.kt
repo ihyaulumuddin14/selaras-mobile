@@ -57,27 +57,27 @@ class OnboardingViewModel(
 
     val slides = listOf(
         OnboardingSlideData(
-            categoryBadge = "Selamat Datang",
-            title = "Ruang Aman untuk Kesejahteraan Emosional",
-            subtitle = "Selaras hadir sebagai pendamping mandiri untuk merawat ketenangan pikiran, mengenali suasana hati, dan memulihkan ritme hidup Anda.",
+            categoryBadge = "Selamat Datang di SELARAS",
+            title = "Pelan-pelan kenali dirimu",
+            subtitle = "Teman untuk memahami perasaan, menemukan jeda, dan merawat diri setiap hari.",
             iconDescription = "🌱"
         ),
         OnboardingSlideData(
             categoryBadge = "Kenali Harimu",
-            title = "Pencatatan Harian yang Sederhana & Penuh Makna",
-            subtitle = "Pantau suasana hati (skala 1–5), tingkat energi (skala 1–10), dan durasi tidur malam Anda untuk melihat pola kesehatan emosional berkala.",
+            title = "Apa kabarmu hari ini?",
+            subtitle = "Catat suasana hati, energi, dan durasi tidur. Temukan pola dari check-in harianmu.",
             iconDescription = "☀️"
         ),
         OnboardingSlideData(
             categoryBadge = "Ruang Bernapas",
-            title = "Relaksasi Pernapasan Kapan Pun Dibutuhkan",
-            subtitle = "Latihan ritmis terbukti klinis (4-7-8, Box Breathing) atau rancang pola kustom Anda sendiri untuk meredakan kecemasan dan stres.",
+            title = "Tarik napas Beri ruang.",
+            subtitle = "Ikuti latihan pernapasan sederhana untuk membantu tubuh dan pikiran lebih rileks.",
             iconDescription = "💨"
         ),
         OnboardingSlideData(
             categoryBadge = "Pahami Dirimu",
-            title = "Penapisan PHQ-9 & Ringkasan Konselor",
-            subtitle = "Evaluasi mandiri dengan instrumen baku depresi PHQ-9 serta cetak ringkasan rekam mandiri format PDF untuk sesi konsultasi profesional.",
+            title = "Pahami pola mulai bercerita.",
+            subtitle = "Kenali diri lewat skrining dan ringkasan pribadi. Pilih yang ingin kamu bawa saat konseling.\n" + "Bukan diagnosis atau pengganti tenaga profesional.",
             iconDescription = "📊"
         )
     )
@@ -117,6 +117,21 @@ class OnboardingViewModel(
                 errorMessage = null
             )
         }
+    }
+
+    /**
+     * Resets the onboarding state back to slide 1 of the carousel (used when clearing all data).
+     */
+    fun resetToOnboarding() {
+        _uiState.value = OnboardingUiState(
+            currentDestination = OnboardingDestination.ONBOARDING_CAROUSEL,
+            carouselIndex = 0,
+            isConsentChecked = false,
+            isConsentAccepted = false,
+            isOnboardingCompleted = false,
+            isLoading = false,
+            errorMessage = null
+        )
     }
 
     fun nextSlide() {

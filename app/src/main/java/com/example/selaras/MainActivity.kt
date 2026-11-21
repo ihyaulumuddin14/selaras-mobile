@@ -1,213 +1,184 @@
 package com.example.selaras
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
+import com.example.selaras.core.di.AppContainer
+import com.example.selaras.core.navigation.AppNavigation
 import com.example.selaras.core.ui.theme.SelarasTheme
+import com.example.selaras.features.breathing.BreathingViewModel
+import com.example.selaras.features.checkin.CheckInTab
+import com.example.selaras.features.checkin.CheckInViewModel
+import com.example.selaras.features.dashboard.DashboardViewModel
+import com.example.selaras.features.onboarding.OnboardingScreen
+import com.example.selaras.features.onboarding.OnboardingViewModel
 import com.example.selaras.features.security.AppLockMasterScreen
-import com.example.selaras.features.security.AppLockMode
 import com.example.selaras.features.security.AppLockViewModel
-import com.example.selaras.features.security.components.SecurityIcons
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * Root destinations for application lifecycle and security gates.
+ */
+enum class AppRootDestination {
+    ONBOARDING,
+    APP_LOCK,
+    MAIN_APP
+}
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var container: AppContainer
+    private lateinit var onboardingViewModel: OnboardingViewModel
     private lateinit var appLockViewModel: AppLockViewModel
+    private lateinit var dashboardViewModel: DashboardViewModel
+    private lateinit var checkInViewModel: CheckInViewModel
+    private lateinit var breathingViewModel: BreathingViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val container = (application as SelarasApplication).container
+        container = (application as SelarasApplication).container
+
+        onboardingViewModel = ViewModelProvider(
+            this,
+            OnboardingViewModel.Factory(
+                repository = container.appSettingsRepository,
+                isPinSetProvider = { container.securityRepository.isPinSet() }
+            )
+        )[OnboardingViewModel::class.java]
 
         appLockViewModel = ViewModelProvider(
             this,
-            AppLockViewModel.Factory(container.securityRepository)
+            AppLockViewModel.Factory(
+                securityRepository = container.securityRepository
+            )
         )[AppLockViewModel::class.java]
+
+        dashboardViewModel = ViewModelProvider(
+            this,
+            DashboardViewModel.Factory(
+                checkInRepository = container.checkInRepository,
+                screeningRepository = container.screeningRepository
+            )
+        )[DashboardViewModel::class.java]
+
+        checkInViewModel = ViewModelProvider(
+            this,
+            CheckInViewModel.Factory(container.checkInRepository)
+        )[CheckInViewModel::class.java]
+
+        breathingViewModel = ViewModelProvider(
+            this,
+            BreathingViewModel.Factory(container.breathingRepository)
+        )[BreathingViewModel::class.java]
 
         enableEdgeToEdge()
         setContent {
             SelarasTheme {
-                var testDestination by remember { mutableStateOf("SECURITY") }
-
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Box(modifier = Modifier.padding(innerPadding)) {
-                        when (testDestination) {
-                            "SECURITY" -> {
-                                AppLockMasterScreen(
-                                    viewModel = appLockViewModel,
-                                    onUnlockSuccess = {
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Berhasil Membuka Kunci!",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        testDestination = "SUCCESS_HUB"
-                                    },
-                                    onSetupComplete = {
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "PIN & Recovery Berhasil Dibuat!",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        testDestination = "SUCCESS_HUB"
-                                    }
-                                )
-                            }
-                            "SUCCESS_HUB" -> {
-                                SecurityTestHub(
-                                    onTestUnlock = {
-                                        appLockViewModel.switchToUnlockMode()
-                                        testDestination = "SECURITY"
-                                    },
-                                    onTestRecovery = {
-                                        appLockViewModel.switchToRecoveryMode()
-                                        testDestination = "SECURITY"
-                                    },
-                                    onResetAndTestSetup = {
-                                        appLockViewModel.restartSecurityForTesting()
-                                        testDestination = "SECURITY"
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+                MainApp(
+                    container = container,
+                    onboardingViewModel = onboardingViewModel,
+                    appLockViewModel = appLockViewModel,
+                    dashboardViewModel = dashboardViewModel,
+                    checkInViewModel = checkInViewModel,
+                    breathingViewModel = breathingViewModel
+                )
             }
         }
     }
 }
 
 @Composable
-fun SecurityTestHub(
-    onTestUnlock: () -> Unit,
-    onTestRecovery: () -> Unit,
-    onResetAndTestSetup: () -> Unit
+fun MainApp(
+    container: AppContainer,
+    onboardingViewModel: OnboardingViewModel,
+    appLockViewModel: AppLockViewModel,
+    dashboardViewModel: DashboardViewModel,
+    checkInViewModel: CheckInViewModel,
+    breathingViewModel: BreathingViewModel,
+    modifier: Modifier = Modifier
 ) {
-    val pineGreen = Color(0xFF356859)
-    val background = Color(0xFFF7F7F2)
-    val textPrimary = Color(0xFF243B35)
-    val textSecondary = Color(0xFF52675F)
-    val primaryContainer = Color(0xFFDCECE3)
+    var rootDestination by remember { mutableStateOf(AppRootDestination.ONBOARDING) }
+    val coroutineScope = rememberCoroutineScope()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(background)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = SecurityIcons.Shield,
-                contentDescription = null,
-                tint = pineGreen,
-                modifier = Modifier.size(36.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(
-            text = "Autentikasi Berhasil",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = textPrimary
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Fitur App Lock & Recovery Code berjalan dengan sukses sesuai standar keamanan Selaras.",
-            fontSize = 14.sp,
-            color = textSecondary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Pilih Skenario Pengujian:",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimary
+    AnimatedContent(
+        targetState = rootDestination,
+        transitionSpec = {
+            (fadeIn(animationSpec = tween(350, easing = FastOutSlowInEasing)) +
+                slideInHorizontally(animationSpec = tween(350, easing = FastOutSlowInEasing)) { it / 4 })
+                .togetherWith(
+                    fadeOut(animationSpec = tween(280, easing = FastOutSlowInEasing)) +
+                        slideOutHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { -it / 4 }
                 )
+        },
+        label = "RootDestinationTransition",
+        modifier = modifier.fillMaxSize()
+    ) { destination ->
+        when (destination) {
+            AppRootDestination.ONBOARDING -> {
+                OnboardingScreen(
+                    viewModel = onboardingViewModel,
+                    onNavigateToDashboard = {
+                        rootDestination = AppRootDestination.MAIN_APP
+                    },
+                    onNavigateToAppLock = {
+                        appLockViewModel.switchToUnlockMode()
+                        rootDestination = AppRootDestination.APP_LOCK
+                    }
+                )
+            }
 
-                Button(
-                    onClick = onTestUnlock,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = pineGreen),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text("1. Tes Buka Kunci (Unlock Screen)")
-                }
+            AppRootDestination.APP_LOCK -> {
+                AppLockMasterScreen(
+                    viewModel = appLockViewModel,
+                    onUnlockSuccess = {
+                        rootDestination = AppRootDestination.MAIN_APP
+                    },
+                    onSetupComplete = {
+                        rootDestination = AppRootDestination.MAIN_APP
+                    }
+                )
+            }
 
-                Button(
-                    onClick = onTestRecovery,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = pineGreen),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text("2. Tes Lupa PIN & Pemulihan")
-                }
-
-                OutlinedButton(
-                    onClick = onResetAndTestSetup,
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text("3. Reset & Ulangi Setup PIN Awal", color = pineGreen)
-                }
+            AppRootDestination.MAIN_APP -> {
+                AppNavigation(
+                    container = container,
+                    dashboardViewModel = dashboardViewModel,
+                    checkInViewModel = checkInViewModel,
+                    breathingViewModel = breathingViewModel,
+                    appLockViewModel = appLockViewModel,
+                    onResetToOnboarding = {
+                        coroutineScope.launch {
+                            withContext(Dispatchers.IO) {
+                                container.database.clearAllTables()
+                                container.securityRepository.clearSecurity()
+                            }
+                            dashboardViewModel.refresh()
+                            checkInViewModel.setTab(CheckInTab.TODAY)
+                            onboardingViewModel.resetToOnboarding()
+                            rootDestination = AppRootDestination.ONBOARDING
+                        }
+                    }
+                )
             }
         }
     }

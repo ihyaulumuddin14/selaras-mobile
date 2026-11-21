@@ -1,6 +1,7 @@
 package com.example.selaras.features.security.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -148,6 +149,7 @@ fun RecoveryCodeDisplayScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { onCheckSaved(!state.isRecoverySavedChecked) }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

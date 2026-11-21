@@ -1,9 +1,15 @@
 package com.example.selaras.features.onboarding
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,85 +71,61 @@ fun OnboardingScreen(
             .safeDrawingPadding(),
         color = OnboardingColors.Background
     ) {
-        when (state.currentDestination) {
-            OnboardingDestination.SPLASH -> {
-                SplashScreen(
-                    onCheckLaunchState = {
-                        viewModel.checkAppLaunchState(forceOnboarding = forceShowOnboarding)
-                    }
-                )
-            }
-            OnboardingDestination.ONBOARDING_CAROUSEL -> {
-                BackHandler(enabled = state.carouselIndex > 0) {
-                    viewModel.prevSlide()
-                }
-                OnboardingCarouselContent(
-                    state = state,
-                    slides = viewModel.slides,
-                    onNext = viewModel::nextSlide,
-                    onPrev = viewModel::prevSlide,
-                    onSkip = viewModel::skipToConsent,
-                    onDotClick = viewModel::setSlideIndex
-                )
-            }
-            OnboardingDestination.INFORMED_CONSENT -> {
-                BackHandler {
-                    viewModel.backToCarousel()
-                }
-                InformedConsentContent(
-                    state = state,
-                    onConsentChange = viewModel::setConsentChecked,
-                    onSubmitConsent = { viewModel.submitConsentAndComplete() },
-                    onBackToCarousel = viewModel::backToCarousel
-                )
-            }
-            OnboardingDestination.NAVIGATE_TO_DASHBOARD,
-            OnboardingDestination.NAVIGATE_TO_APP_LOCK -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
-                        border = BorderStroke(1.dp, OnboardingColors.CardBorder)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("🌿", fontSize = 48.sp)
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                text = "Orientasi & Persetujuan Selesai!",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = OnboardingColors.TextPrimary,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "Status informed consent telah berhasil disimpan ke database lokal terenkripsi.",
-                                fontSize = 14.sp,
-                                color = OnboardingColors.TextSecondary,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 20.sp
-                            )
-                            Spacer(Modifier.height(24.dp))
-                            Button(
-                                onClick = { viewModel.restartForTesting() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
-                            ) {
-                                Text("Ulangi Tes Splash & Onboarding", fontWeight = FontWeight.SemiBold)
-                            }
+        AnimatedContent(
+            targetState = state.currentDestination,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(320, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { it / 3 })
+                    .togetherWith(
+                        fadeOut(animationSpec = tween(250, easing = FastOutSlowInEasing)) +
+                            slideOutHorizontally(animationSpec = tween(250, easing = FastOutSlowInEasing)) { -it / 3 }
+                    )
+            },
+            label = "OnboardingDestinationTransition",
+            modifier = Modifier.fillMaxSize()
+        ) { destination ->
+            when (destination) {
+                OnboardingDestination.SPLASH -> {
+                    SplashScreen(
+                        onCheckLaunchState = {
+                            viewModel.checkAppLaunchState(forceOnboarding = forceShowOnboarding)
                         }
+                    )
+                }
+                OnboardingDestination.ONBOARDING_CAROUSEL -> {
+                    BackHandler(enabled = state.carouselIndex > 0) {
+                        viewModel.prevSlide()
+                    }
+                    OnboardingCarouselContent(
+                        state = state,
+                        slides = viewModel.slides,
+                        onNext = viewModel::nextSlide,
+                        onPrev = viewModel::prevSlide,
+                        onSkip = viewModel::skipToConsent,
+                        onDotClick = viewModel::setSlideIndex
+                    )
+                }
+                OnboardingDestination.INFORMED_CONSENT -> {
+                    BackHandler {
+                        viewModel.backToCarousel()
+                    }
+                    InformedConsentContent(
+                        state = state,
+                        onConsentChange = viewModel::setConsentChecked,
+                        onSubmitConsent = { viewModel.submitConsentAndComplete() },
+                        onBackToCarousel = viewModel::backToCarousel
+                    )
+                }
+                OnboardingDestination.NAVIGATE_TO_DASHBOARD,
+                OnboardingDestination.NAVIGATE_TO_APP_LOCK -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = OnboardingColors.Primary,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
                 }
             }
@@ -226,7 +208,7 @@ fun OnboardingCarouselContent(
             .fillMaxSize()
             .padding(24.dp)
     ) {
-        // Top Action Bar (Skip button)
+        // Top Action Bar (Badge on the left, Skip button on the right)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -245,120 +227,131 @@ fun OnboardingCarouselContent(
                 )
             }
 
-            Spacer(Modifier.weight(0.8f))
-
-            // Slide Visual Emblem Card
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(240.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
-                border = BorderStroke(1.dp, OnboardingColors.CardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.size(110.dp),
-                        shape = CircleShape,
-                        color = OnboardingColors.PrimaryContainer
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = currentSlide.iconDescription,
-                                fontSize = 52.sp
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(32.dp))
-
-            // Headline & Description
-            Text(
-                text = currentSlide.title,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = OnboardingColors.TextPrimary,
-                lineHeight = 32.sp
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            Text(
-                text = currentSlide.subtitle,
-                fontSize = 15.sp,
-                color = OnboardingColors.TextSecondary,
-                lineHeight = 22.sp
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            // Pagination Dots Indicator
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                for (i in 0 until state.totalSlides) {
-                    val isSelected = i == state.carouselIndex
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .height(8.dp)
-                            .width(if (isSelected) 24.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSelected) OnboardingColors.Primary
-                                else OnboardingColors.Outline.copy(alpha = 0.3f)
-                            )
-                            .clickable { onDotClick(i) }
+            if (!state.isLastSlide) {
+                TextButton(onClick = onSkip) {
+                    Text(
+                        text = "Lewati",
+                        color = OnboardingColors.TextSecondary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
+        }
 
-            Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
 
-            // Navigation Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        // Slide Visual Emblem Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = OnboardingColors.Surface),
+            border = BorderStroke(1.dp, OnboardingColors.CardBorder),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                if (state.carouselIndex > 0) {
-                    OutlinedButton(
-                        onClick = onPrev,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, OnboardingColors.Outline)
-                    ) {
+                Surface(
+                    modifier = Modifier.size(110.dp),
+                    shape = CircleShape,
+                    color = OnboardingColors.PrimaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Kembali",
-                            color = OnboardingColors.Primary,
-                            fontWeight = FontWeight.SemiBold
+                            text = currentSlide.iconDescription,
+                            fontSize = 52.sp
                         )
                     }
                 }
+            }
+        }
 
-                Button(
-                    onClick = onNext,
+        Spacer(Modifier.height(32.dp))
+
+        // Headline & Description
+        Text(
+            text = currentSlide.title,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = OnboardingColors.TextPrimary,
+            lineHeight = 32.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            text = currentSlide.subtitle,
+            fontSize = 15.sp,
+            color = OnboardingColors.TextSecondary,
+            lineHeight = 22.sp
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        // Pagination Dots Indicator
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            for (i in 0 until state.totalSlides) {
+                val isSelected = i == state.carouselIndex
+                Box(
                     modifier = Modifier
-                        .weight(if (state.carouselIndex > 0) 1f else 2f)
+                        .padding(horizontal = 4.dp)
+                        .height(8.dp)
+                        .width(if (isSelected) 24.dp else 8.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) OnboardingColors.Primary
+                            else OnboardingColors.Outline.copy(alpha = 0.3f)
+                        )
+                        .clickable { onDotClick(i) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        // Navigation Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (state.carouselIndex > 0) {
+                OutlinedButton(
+                    onClick = onPrev,
+                    modifier = Modifier
+                        .weight(1f)
                         .height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
+                    border = BorderStroke(1.dp, OnboardingColors.Outline)
                 ) {
                     Text(
-                        text = if (state.isLastSlide) "Selesai" else "Lanjut",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
+                        text = "Kembali",
+                        color = OnboardingColors.Primary,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+
+            Button(
+                onClick = onNext,
+                modifier = Modifier
+                    .weight(if (state.carouselIndex > 0) 1f else 2f)
+                    .height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = OnboardingColors.Primary)
+            ) {
+                Text(
+                    text = if (state.isLastSlide) "Selesai" else "Lanjut",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
             }
         }
     }
@@ -440,7 +433,6 @@ fun InformedConsentContent(
                     .verticalScroll(scrollState)
             ) {
                 ConsentClauseCard(
-                    icon = "⚕️",
                     title = "Bukan Alat Diagnosis Medis",
                     content = "Selaras adalah sarana refleksi mandiri (*self-care companion*) dan penapisan awal. Selaras BUKAN pengganti diagnosis medis, pemeriksaan psikiatri, atau sesi psikoterapi formal dari tenaga kesehatan profesional berlisensi."
                 )
@@ -448,7 +440,6 @@ fun InformedConsentContent(
                 Spacer(Modifier.height(12.dp))
 
                 ConsentClauseCard(
-                    icon = "🔒",
                     title = "Kedaulatan Privasi & Enkripsi Lokal",
                     content = "Seluruh catatan suasana hati harian, durasi tidur, dan hasil penapisan depresi PHQ-9 Anda disimpan secara lokal pada perangkat dan dienkripsi penuh menggunakan AES-256 (SQLCipher). Data Anda tidak dijual kepada pihak ketiga."
                 )
@@ -456,7 +447,6 @@ fun InformedConsentContent(
                 Spacer(Modifier.height(12.dp))
 
                 ConsentClauseCard(
-                    icon = "🆘",
                     title = "Bantuan Krisis & Kontak Darurat",
                     content = "Jika Anda mengalami krisis psikologis hebat atau memiliki dorongan untuk menyakiti diri sendiri, segera hubungi Layanan Darurat Kesehatan Jiwa Kemenkes (Hotline 119 ext 8) atau segera kunjungi instalasi gawat darurat rumah sakit terdekat."
                 )
@@ -525,7 +515,6 @@ fun InformedConsentContent(
 
 @Composable
 private fun ConsentClauseCard(
-    icon: String = "⚕️",
     title: String,
     content: String
 ) {
@@ -537,7 +526,6 @@ private fun ConsentClauseCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = icon, fontSize = 20.sp)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = title,

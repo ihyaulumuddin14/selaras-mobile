@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -20,11 +21,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.core.ui.components.SelarasHeader
 
 internal object BreathingColors {
     val Primary = Color(0xFF356859)
@@ -43,38 +46,23 @@ internal fun BreathingHeader(
     onBack: () -> Unit,
     onHelp: (() -> Unit)? = null
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(60.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.size(54.dp).clickable(role = Role.Button, onClick = onBack),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Kembali",
-                tint = BreathingColors.Primary
-            )
-        }
-        Text(
-            title,
-            color = BreathingColors.Text,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 20.sp
-        )
-        Spacer(Modifier.weight(1f))
-        if (onHelp != null) {
-            Box(
-                modifier = Modifier.size(50.dp).clickable(role = Role.Button, onClick = onHelp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("ⓘ", color = BreathingColors.Primary, fontSize = 24.sp)
+    SelarasHeader(
+        title = title,
+        onBack = onBack,
+        actions = if (onHelp != null) {
+            {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .clickable(role = Role.Button, onClick = onHelp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("ⓘ", color = BreathingColors.Primary, fontSize = 22.sp)
+                }
             }
-        } else {
-            Spacer(Modifier.width(16.dp))
-        }
-    }
+        } else null
+    )
 }
 
 @Composable
