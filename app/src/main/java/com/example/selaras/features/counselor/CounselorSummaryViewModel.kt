@@ -13,12 +13,14 @@ import com.example.selaras.domain.model.ScreeningAnswer
 import com.example.selaras.domain.model.ScreeningCategory
 import com.example.selaras.domain.model.ScreeningResult
 import com.example.selaras.domain.model.ScreeningType
+import com.example.selaras.domain.repository.AppSettingsRepository
 import com.example.selaras.domain.repository.CheckInRepository
 import com.example.selaras.domain.repository.CounselorRepository
 import com.example.selaras.domain.repository.ScreeningRepository
 import com.example.selaras.domain.usecase.counselor.CreateCounselorSummaryUseCase
 import com.example.selaras.domain.usecase.counselor.ExportCounselorSummaryPdfUseCase
 import com.example.selaras.domain.usecase.counselor.GetCounselorEligibilityUseCase
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -64,14 +67,16 @@ data class CounselorScreeningUiItem(
     val score: Int,
     val categoryText: String,
     val isSelected: Boolean = false,
-    val details: String = ""
+    val details: String = "",
+    val createdAt: Instant = Instant.now()
 )
 
 data class CounselorNoteUiItem(
     val date: LocalDate,
     val title: String,
     val noteText: String,
-    val isSelected: Boolean = false
+    val isSelected: Boolean = false,
+    val createdAt: Instant = Instant.now()
 )
 
 data class CounselorSummaryUiState(
@@ -109,6 +114,7 @@ data class CounselorSummaryUiState(
     val availableNotes: List<CounselorNoteUiItem> = emptyList(),
     val createdSummary: CounselorSummary? = null,
     val isTodayCheckedIn: Boolean = false,
+    val userName: String? = null,
     // Snapshot info
     val snapshotId: String = "S-01",
     val sourceRevision: String = "r4",
@@ -123,11 +129,17 @@ class CounselorSummaryViewModel(
     private val counselorRepository: CounselorRepository,
     private val createSummaryUseCase: CreateCounselorSummaryUseCase,
     private val getEligibilityUseCase: GetCounselorEligibilityUseCase,
-    private val exportPdfUseCase: ExportCounselorSummaryPdfUseCase = ExportCounselorSummaryPdfUseCase()
+    private val exportPdfUseCase: ExportCounselorSummaryPdfUseCase = ExportCounselorSummaryPdfUseCase(),
+    private val appSettingsRepository: AppSettingsRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(buildDefaultInitialState())
     val uiState: StateFlow<CounselorSummaryUiState> = _uiState.asStateFlow()
+
+    private var realDataJob: Job? = null
+    private var screeningJob: Job? = null
+    private var todayCheckInJob: Job? = null
+    private var settingsJob: Job? = null
 
     init {
         setupDefaultDailyItems()
@@ -249,22 +261,32 @@ class CounselorSummaryViewModel(
                             curr = curr.plusDays(1)
                         }
 
-                        val notes = checkIns.filter { !it.note.isNullOrBlank() }.map { ci ->
-                            val fmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+                        val fmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+                        // Aturan: Urutkan berdasarkan createdAt terbaru, jika > 7 ambil 7 terbarunya, jika <= 7 ambil semua
+                        val notesWithCheckIn = checkIns
+                            .filter { !it.note.isNullOrBlank() }
+                            .sortedByDescending { it.createdAt }
+                        val limitedNotes = if (notesWithCheckIn.size > 7) notesWithCheckIn.take(7) else notesWithCheckIn
+
+                        val realNotes = limitedNotes.map { ci ->
                             CounselorNoteUiItem(
                                 date = ci.checkInDate,
                                 title = "Catatan Refleksi · ${ci.checkInDate.format(fmt)}",
                                 noteText = ci.note.orEmpty(),
-                                isSelected = true
+                                isSelected = false,
+                                createdAt = ci.createdAt
                             )
                         }
 
                         val timeFmt = DateTimeFormatter.ofPattern("d MMMM yyyy · HH.mm", Locale.forLanguageTag("id"))
                         val timeStr = LocalDateTime.now().format(timeFmt)
-
                         val isTodayRecorded = checkIns.any { it.checkInDate == today }
 
                         _uiState.update { current ->
+                            val prevSelectedDates = current.availableNotes.filter { it.isSelected }.map { it.date }.toSet()
+                            val updatedNotes = realNotes.map { note ->
+                                if (note.date in prevSelectedDates) note.copy(isSelected = true) else note
+                            }
                             current.copy(
                                 periodStartDate = startDate,
                                 periodEndDate = endDate,
@@ -276,7 +298,7 @@ class CounselorSummaryViewModel(
                                 avgSleepHours = avgSleepHours,
                                 avgEnergy = avgEnergy,
                                 dailyItems = items,
-                                availableNotes = if (notes.isNotEmpty()) notes else current.availableNotes,
+                                availableNotes = if (updatedNotes.isNotEmpty()) updatedNotes else current.availableNotes,
                                 createdTimeString = timeStr,
                                 isTodayCheckedIn = isTodayRecorded,
                                 screenState = if (isEligible) {
@@ -303,32 +325,50 @@ class CounselorSummaryViewModel(
             screeningRepository.getAllScreeningResultsFlow()
                 .catch { /* ignore */ }
                 .collect { screenings ->
-                    if (screenings.isNotEmpty()) {
-                        val dateFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
-                        val items = screenings.map { sc ->
-                            val typeLabel = if (sc.screeningType == ScreeningType.ROUTINE) "Skrining Berkala" else "Skrining Mandiri"
-                            val catLabel = when (sc.category.name.uppercase()) {
-                                "MINIMAL" -> "Gejala Minimal"
-                                "RINGAN" -> "Gejala Ringan"
-                                "SEDANG" -> "Gejala Sedang"
-                                "SEDANG_BERAT" -> "Gejala Sedang Berat"
-                                "BERAT" -> "Gejala Berat"
-                                else -> sc.category.name
-                            }
-                            val dateStr = sc.periodEndDate.format(dateFmt)
-                            CounselorScreeningUiItem(
-                                id = sc.id,
-                                title = "$typeLabel · $dateStr (Skor $sc.totalScore)",
-                                typeName = typeLabel,
-                                dateString = dateStr,
-                                score = sc.totalScore,
-                                categoryText = catLabel,
-                                isSelected = false,
-                                details = "Instrumen: ${sc.instrumentVersion}\nSkor Total: ${sc.totalScore} / 27\nKategori: $catLabel\nDiselesaikan pada evaluasi PHQ-9"
-                            )
+                    val dateFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+                    // Aturan: Urutkan berdasarkan createdAt terbaru, jika > 7 ambil 7 terbarunya, jika <= 7 ambil semua
+                    val sortedScreenings = screenings.sortedByDescending { it.createdAt }
+                    val limitedScreenings = if (sortedScreenings.size > 7) sortedScreenings.take(7) else sortedScreenings
+
+                    val items = limitedScreenings.map { sc ->
+                        val typeLabel = if (sc.screeningType == ScreeningType.ROUTINE) "Skrining Berkala" else "Skrining Mandiri"
+                        val catLabel = when (sc.category.name.uppercase()) {
+                            "MINIMAL" -> "Gejala Minimal"
+                            "RINGAN" -> "Gejala Ringan"
+                            "SEDANG" -> "Gejala Sedang"
+                            "SEDANG_BERAT" -> "Gejala Sedang Berat"
+                            "BERAT" -> "Gejala Berat"
+                            else -> sc.category.name
                         }
-                        _uiState.update { it.copy(availableScreenings = items) }
+                        val dateStr = sc.periodEndDate.format(dateFmt)
+                        CounselorScreeningUiItem(
+                            id = sc.id,
+                            title = "$typeLabel · $dateStr (Skor ${sc.totalScore})",
+                            typeName = typeLabel,
+                            dateString = dateStr,
+                            score = sc.totalScore,
+                            categoryText = catLabel,
+                            isSelected = false,
+                            details = "Instrumen: ${sc.instrumentVersion}\nSkor Total: ${sc.totalScore} / 27\nKategori: $catLabel\nDiselesaikan pada evaluasi PHQ-9",
+                            createdAt = sc.createdAt
+                        )
                     }
+                    _uiState.update { current ->
+                        val prevSelectedIds = current.availableScreenings.filter { it.isSelected }.map { it.id }.toSet()
+                        val updated = items.map {
+                            if (it.id in prevSelectedIds) it.copy(isSelected = true) else it
+                        }
+                        current.copy(availableScreenings = updated)
+                    }
+                }
+        }
+
+        settingsJob?.cancel()
+        settingsJob = viewModelScope.launch {
+            appSettingsRepository?.getSettingsFlow()
+                ?.catch { /* ignore */ }
+                ?.collect { settings ->
+                    _uiState.update { it.copy(userName = settings?.userName) }
                 }
         }
     }
@@ -353,7 +393,9 @@ class CounselorSummaryViewModel(
             val updated = current.availableNotes.map {
                 if (it.date == date) it.copy(isSelected = selected) else it
             }
+            val anySelected = updated.any { it.isSelected }
             current.copy(
+                includePersonalNotes = anySelected,
                 availableNotes = updated,
                 selectNoteN09 = updated.find { it.date.dayOfMonth == 9 }?.isSelected ?: false,
                 selectNoteN11 = updated.find { it.date.dayOfMonth == 11 }?.isSelected ?: false
@@ -432,14 +474,27 @@ class CounselorSummaryViewModel(
                     )
                 }
             } else {
-                // Fallback for preview or mocked test environments
+                // Fallback for dummy preview or test environments
                 val hasScreenings = selectedScreeningIds.isNotEmpty() || currentState.selectScreeningManual || currentState.selectScreeningRoutine
                 val hasNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty()
                 val snapshotId = if (hasScreenings || hasNotes) "S-02" else "S-01"
 
+                val dummySummary = CounselorSummary(
+                    id = 1L,
+                    screeningResultId = null,
+                    periodStartDate = currentState.periodStartDate,
+                    periodEndDate = currentState.periodEndDate,
+                    includeCheckinAnalysis = true,
+                    checkinDaysCount = currentState.recordedDays,
+                    ruleVersion = currentState.ruleVersion,
+                    snapshotJson = buildSnapshotJsonString(currentState),
+                    createdAt = Instant.now()
+                )
+
                 _uiState.update {
                     it.copy(
                         screenState = CounselorScreenState.PREVIEW,
+                        createdSummary = dummySummary,
                         snapshotId = snapshotId,
                         sourceRevision = "r4"
                     )
@@ -455,13 +510,15 @@ class CounselorSummaryViewModel(
 
             val currentState = _uiState.value
             val summaryToExport = currentState.createdSummary ?: CounselorSummary(
-                screeningResultId = currentState.availableScreenings.firstOrNull { it.isSelected }?.id,
+                id = 1L,
+                screeningResultId = null,
                 periodStartDate = currentState.periodStartDate,
                 periodEndDate = currentState.periodEndDate,
                 includeCheckinAnalysis = true,
                 checkinDaysCount = currentState.recordedDays,
                 ruleVersion = currentState.ruleVersion,
-                snapshotJson = buildSnapshotJsonString(currentState)
+                snapshotJson = buildSnapshotJsonString(currentState),
+                createdAt = Instant.now()
             )
 
             // Ensure summary is persisted in counselorRepository if not already
@@ -471,7 +528,7 @@ class CounselorSummaryViewModel(
                 summaryToExport
             }
 
-            val exportResult = exportPdfUseCase(context, finalSummary)
+            val exportResult = exportPdfUseCase(context, finalSummary, userName = currentState.userName)
             if (exportResult.isSuccess) {
                 _uiState.update {
                     it.copy(
@@ -595,20 +652,257 @@ class CounselorSummaryViewModel(
         _uiState.update { it.copy(screenState = CounselorScreenState.EXPORT_SUCCESS) }
     }
 
+    /**
+     * Setup Dummy Data untuk keperluan pengujian alur Ringkasan Konselor hingga Export PDF.
+     * Mengisi data check-in harian (5 dari 7 hari tercatat, memenuhi syarat >= 4 hari),
+     * list hasil skrining (9 data dengan createdAt berbeda untuk menguji filter maksimal 7 data terbaru),
+     * dan list catatan pribadi (9 data dengan createdAt berbeda untuk menguji filter maksimal 7 data terbaru).
+     */
+    fun setupDummyDataForExportPdf() {
+        realDataJob?.cancel()
+        screeningJob?.cancel()
+        todayCheckInJob?.cancel()
+
+        val today = LocalDate.now()
+        val startDate = today.minusDays(6)
+        val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+
+        // 1. Data Check-in Harian (5 hari tercatat, 2 hari absen -> Memenuhi syarat minimal 4 hari)
+        val daily = listOf(
+            DailySummaryItem(dayNumber = startDate.dayOfMonth, date = startDate, isRecorded = true, mood = 4, sleepHours = 7.5, energy = 7, note = "Merasakan kemajuan setelah istirahat cukup."),
+            DailySummaryItem(dayNumber = startDate.plusDays(1).dayOfMonth, date = startDate.plusDays(1), isRecorded = true, mood = 3, sleepHours = 6.0, energy = 5, note = "Cukup banyak pekerjaan hari ini, terasa sedikit penat."),
+            DailySummaryItem(dayNumber = startDate.plusDays(2).dayOfMonth, date = startDate.plusDays(2), isRecorded = false),
+            DailySummaryItem(dayNumber = startDate.plusDays(3).dayOfMonth, date = startDate.plusDays(3), isRecorded = true, mood = 4, sleepHours = 7.0, energy = 8, note = "Berjalan santai di pagi hari sangat menyegarkan pikiran."),
+            DailySummaryItem(dayNumber = startDate.plusDays(4).dayOfMonth, date = startDate.plusDays(4), isRecorded = true, mood = 2, sleepHours = 5.5, energy = 4, note = "Merasa cemas memikirkan evaluasi mingguan, butuh teman bicara."),
+            DailySummaryItem(dayNumber = startDate.plusDays(5).dayOfMonth, date = startDate.plusDays(5), isRecorded = false),
+            DailySummaryItem(dayNumber = startDate.plusDays(6).dayOfMonth, date = startDate.plusDays(6), isRecorded = true, mood = 4, sleepHours = 8.0, energy = 7, note = "Menghabiskan waktu membaca buku, suasana hati lebih tenang.")
+        )
+
+        val recordedDates = daily.filter { it.isRecorded }.map { it.date }
+        val missingDates = daily.filter { !it.isRecorded }.map { it.date }
+        val avgMood = 3.4
+        val avgSleepHours = 6.8
+        val avgEnergy = 6.0
+
+        // 2. Dummy Skrining: Sediakan 9 data skrining dengan createdAt berbeda
+        // Aturan: Jika > 7, hanya 7 terbaru berdasarkan createdAt yang akan tampil di UI
+        val now = Instant.now()
+        val dummyScreenings = listOf(
+            CounselorScreeningUiItem(
+                id = 101L,
+                title = "Skrining Mandiri · ${today.format(periodFmt)} (Skor 8)",
+                typeName = "Skrining Mandiri",
+                dateString = today.format(periodFmt),
+                score = 8,
+                categoryText = "Gejala Depresi Tingkat Ringan",
+                isSelected = true,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 8 / 27\nKategori: Gejala Ringan\nDiselesaikan pada sesi refleksi mandiri",
+                createdAt = now
+            ),
+            CounselorScreeningUiItem(
+                id = 102L,
+                title = "Skrining Berkala · ${today.minusDays(1).format(periodFmt)} (Skor 11)",
+                typeName = "Skrining Berkala",
+                dateString = today.minusDays(1).format(periodFmt),
+                score = 11,
+                categoryText = "Gejala Depresi Tingkat Sedang",
+                isSelected = true,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 11 / 27\nKategori: Gejala Sedang\nDiselesaikan pada evaluasi berkala",
+                createdAt = now.minusSeconds(86400 * 1)
+            ),
+            CounselorScreeningUiItem(
+                id = 103L,
+                title = "Skrining Mandiri · ${today.minusDays(2).format(periodFmt)} (Skor 6)",
+                typeName = "Skrining Mandiri",
+                dateString = today.minusDays(2).format(periodFmt),
+                score = 6,
+                categoryText = "Gejala Depresi Tingkat Ringan",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 6 / 27\nKategori: Gejala Ringan",
+                createdAt = now.minusSeconds(86400 * 2)
+            ),
+            CounselorScreeningUiItem(
+                id = 104L,
+                title = "Skrining Berkala · ${today.minusDays(3).format(periodFmt)} (Skor 14)",
+                typeName = "Skrining Berkala",
+                dateString = today.minusDays(3).format(periodFmt),
+                score = 14,
+                categoryText = "Gejala Depresi Tingkat Sedang",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 14 / 27\nKategori: Gejala Sedang",
+                createdAt = now.minusSeconds(86400 * 3)
+            ),
+            CounselorScreeningUiItem(
+                id = 105L,
+                title = "Skrining Mandiri · ${today.minusDays(4).format(periodFmt)} (Skor 4)",
+                typeName = "Skrining Mandiri",
+                dateString = today.minusDays(4).format(periodFmt),
+                score = 4,
+                categoryText = "Gejala Depresi Tingkat Minimal",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 4 / 27\nKategori: Gejala Minimal",
+                createdAt = now.minusSeconds(86400 * 4)
+            ),
+            CounselorScreeningUiItem(
+                id = 106L,
+                title = "Skrining Berkala · ${today.minusDays(5).format(periodFmt)} (Skor 9)",
+                typeName = "Skrining Berkala",
+                dateString = today.minusDays(5).format(periodFmt),
+                score = 9,
+                categoryText = "Gejala Depresi Tingkat Ringan",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 9 / 27\nKategori: Gejala Ringan",
+                createdAt = now.minusSeconds(86400 * 5)
+            ),
+            CounselorScreeningUiItem(
+                id = 107L,
+                title = "Skrining Mandiri · ${today.minusDays(6).format(periodFmt)} (Skor 7)",
+                typeName = "Skrining Mandiri",
+                dateString = today.minusDays(6).format(periodFmt),
+                score = 7,
+                categoryText = "Gejala Depresi Tingkat Ringan",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 7 / 27\nKategori: Gejala Ringan",
+                createdAt = now.minusSeconds(86400 * 6)
+            ),
+            // Data ke-8 dan ke-9 (lebih lama, untuk memverifikasi batas maksimal 7 item terbaru)
+            CounselorScreeningUiItem(
+                id = 108L,
+                title = "Skrining Mandiri · ${today.minusDays(10).format(periodFmt)} (Skor 12)",
+                typeName = "Skrining Mandiri",
+                dateString = today.minusDays(10).format(periodFmt),
+                score = 12,
+                categoryText = "Gejala Depresi Tingkat Sedang",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 12 / 27\nKategori: Gejala Sedang",
+                createdAt = now.minusSeconds(86400 * 10)
+            ),
+            CounselorScreeningUiItem(
+                id = 109L,
+                title = "Skrining Berkala · ${today.minusDays(14).format(periodFmt)} (Skor 15)",
+                typeName = "Skrining Berkala",
+                dateString = today.minusDays(14).format(periodFmt),
+                score = 15,
+                categoryText = "Gejala Depresi Tingkat Sedang Berat",
+                isSelected = false,
+                details = "Kuesioner Kesehatan PHQ-9 (9 Pertanyaan)\nSkor Total: 15 / 27\nKategori: Gejala Sedang Berat",
+                createdAt = now.minusSeconds(86400 * 14)
+            )
+        )
+
+        // 3. Dummy Catatan Pribadi: Sediakan 9 data catatan dengan createdAt berbeda
+        // Aturan: Jika > 7, hanya 7 terbaru berdasarkan createdAt yang akan tampil di UI
+        val dummyNotes = listOf(
+            CounselorNoteUiItem(
+                date = today,
+                title = "Catatan Refleksi · ${today.format(periodFmt)}",
+                noteText = "Menghabiskan waktu membaca buku, suasana hati lebih tenang.",
+                isSelected = true,
+                createdAt = now
+            ),
+            CounselorNoteUiItem(
+                date = today.minusDays(2),
+                title = "Catatan Refleksi · ${today.minusDays(2).format(periodFmt)}",
+                noteText = "Merasa cemas memikirkan evaluasi mingguan, butuh teman bicara.",
+                isSelected = true,
+                createdAt = now.minusSeconds(86400 * 2)
+            ),
+            CounselorNoteUiItem(
+                date = today.minusDays(3),
+                title = "Catatan Refleksi · ${today.minusDays(3).format(periodFmt)}",
+                noteText = "Berjalan santai di pagi hari sangat menyegarkan pikiran.",
+                isSelected = false,
+                createdAt = now.minusSeconds(86400 * 3)
+            ),
+            CounselorNoteUiItem(
+                date = today.minusDays(5),
+                title = "Catatan Refleksi · ${today.minusDays(5).format(periodFmt)}",
+                noteText = "Cukup banyak pekerjaan hari ini, terasa sedikit penat.",
+                isSelected = false,
+                createdAt = now.minusSeconds(86400 * 5)
+            ),
+            CounselorNoteUiItem(
+                date = today.minusDays(6),
+                title = "Catatan Refleksi · ${today.minusDays(6).format(periodFmt)}",
+                noteText = "Merasakan kemajuan setelah istirahat cukup.",
+                isSelected = false,
+                createdAt = now.minusSeconds(86400 * 6)
+            ),
+            CounselorNoteUiItem(
+                date = today.minusDays(7),
+                title = "Catatan Refleksi · ${today.minusDays(7).format(periodFmt)}",
+                noteText = "Mencoba teknik latihan pernapasan dalam sebelum tidur.",
+                isSelected = false,
+                createdAt = now.minusSeconds(86400 * 7)
+            ),
+            CounselorNoteUiItem(
+                date = today.minusDays(8),
+                title = "Catatan Refleksi · ${today.minusDays(8).format(periodFmt)}",
+                noteText = "Mulai mengurangi screen time di malam hari.",
+                isSelected = false,
+                createdAt = now.minusSeconds(86400 * 8)
+            ),
+            // Catatan ke-8 dan ke-9 (lebih lama, untuk memverifikasi batas maksimal 7 item terbaru)
+            CounselorNoteUiItem(
+                date = today.minusDays(12),
+                title = "Catatan Refleksi · ${today.minusDays(12).format(periodFmt)}",
+                noteText = "Hari yang cukup berat dengan beban tugas menumpuk.",
+                isSelected = false,
+                createdAt = now.minusSeconds(86400 * 12)
+            ),
+            CounselorNoteUiItem(
+                date = today.minusDays(16),
+                title = "Catatan Refleksi · ${today.minusDays(16).format(periodFmt)}",
+                noteText = "Tidur nyenyak dan bangun dengan kondisi bugar.",
+                isSelected = false,
+                createdAt = now.minusSeconds(86400 * 16)
+            )
+        )
+
+        val timeFmt = DateTimeFormatter.ofPattern("d MMMM yyyy · HH.mm", Locale.forLanguageTag("id"))
+        val timeStr = LocalDateTime.now().format(timeFmt)
+
+        _uiState.update { current ->
+            current.copy(
+                screenState = CounselorScreenState.SELECT_CONTENT,
+                periodStartDate = startDate,
+                periodEndDate = today,
+                recordedDays = 5,
+                totalDays = 7,
+                recordedDates = recordedDates,
+                missingDates = missingDates,
+                avgMood = avgMood,
+                avgSleepHours = avgSleepHours,
+                avgEnergy = avgEnergy,
+                dailyItems = daily,
+                availableScreenings = dummyScreenings,
+                availableNotes = dummyNotes,
+                includePersonalNotes = true,
+                isTodayCheckedIn = true,
+                createdTimeString = timeStr,
+                userName = current.userName
+            )
+        }
+    }
+
     private fun buildSnapshotJsonString(state: CounselorSummaryUiState): String {
+        val selectedNoteDates = state.availableNotes.filter { it.isSelected }.map { it.date }.toSet()
         val dailyEntriesJson = state.dailyItems.filter { it.isRecorded }.joinToString(",") { item ->
-            val noteStr = if (state.includePersonalNotes && item.note != null) item.note else ""
+            val noteStr = if (state.includePersonalNotes && (item.date in selectedNoteDates || selectedNoteDates.isEmpty()) && item.note != null) {
+                item.note
+            } else ""
             """{"date": "${item.date}", "mood": ${item.mood}, "sleepHours": ${item.sleepHours}, "energy": ${item.energy}, "note": "$noteStr"}"""
         }
 
         val screeningsJson = state.availableScreenings.filter { it.isSelected }.joinToString(",") { sc ->
-            """{"type": "${sc.typeName}", "score": ${sc.score}, "category": "${sc.categoryText}", "instrumentVersion": "PHQ-9 v1.0"}"""
+            """{"type": "${sc.typeName}", "score": ${sc.score}, "category": "${sc.categoryText}", "date": "${sc.dateString}", "instrumentVersion": "PHQ-9 v1.0"}"""
         }
 
         return """
         {
             "snapshotId": "${state.snapshotId}",
-            "createdAt": "${java.time.Instant.now()}",
+            "userName": "${state.userName.orEmpty()}",
+            "createdAt": "${Instant.now()}",
             "periodStartDate": "${state.periodStartDate}",
             "periodEndDate": "${state.periodEndDate}",
             "ruleVersion": "${state.ruleVersion}",
@@ -627,7 +921,8 @@ class CounselorSummaryViewModel(
         fun provideFactory(
             checkInRepository: CheckInRepository,
             screeningRepository: ScreeningRepository,
-            counselorRepository: CounselorRepository
+            counselorRepository: CounselorRepository,
+            appSettingsRepository: AppSettingsRepository? = null
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -638,7 +933,8 @@ class CounselorSummaryViewModel(
                     screeningRepository = screeningRepository,
                     counselorRepository = counselorRepository,
                     createSummaryUseCase = createUseCase,
-                    getEligibilityUseCase = eligibilityUseCase
+                    getEligibilityUseCase = eligibilityUseCase,
+                    appSettingsRepository = appSettingsRepository
                 ) as T
             }
         }
@@ -677,7 +973,9 @@ class CounselorSummaryViewModel(
             }
             val createUseCase = CreateCounselorSummaryUseCase(emptyCheckIn, emptyScreening, emptyCounselor)
             val eligibilityUseCase = GetCounselorEligibilityUseCase(emptyCheckIn)
-            return CounselorSummaryViewModel(emptyCheckIn, emptyScreening, emptyCounselor, createUseCase, eligibilityUseCase)
+            val vm = CounselorSummaryViewModel(emptyCheckIn, emptyScreening, emptyCounselor, createUseCase, eligibilityUseCase)
+            vm.setupDummyDataForExportPdf()
+            return vm
         }
     }
 }
