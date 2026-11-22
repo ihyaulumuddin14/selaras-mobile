@@ -68,12 +68,12 @@ import com.example.selaras.SelarasApplication
 import com.example.selaras.core.ui.components.SelarasIcons
 import com.example.selaras.domain.usecase.counselor.CreateCounselorSummaryUseCase
 import com.example.selaras.domain.usecase.counselor.GetCounselorEligibilityUseCase
+import kotlinx.coroutines.flow.flowOf
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-// Serasi Color Tokens
 private val CanvasBackground = Color(0xFFF7F7F2)
 private val PineGreen = Color(0xFF356859)
 private val LightSageGreen = Color(0xFFE0EDE4)
@@ -86,10 +86,6 @@ private val DisabledContainer = Color(0xFFE2E8E3)
 private val DisabledContent = Color(0xFF8E9E98)
 private val CardBorder = Color(0xFFE5ECE8)
 
-/**
- * Screen for Counselor Summary generation and local PDF export.
- * Designed with warm, user-friendly language without technical jargon.
- */
 @Composable
 fun CounselorSummaryScreen(
     onNavigateBack: () -> Unit = {},
@@ -124,6 +120,16 @@ fun CounselorSummaryScreen(
     }
 
     val uiState by effectiveViewModel.uiState.collectAsState()
+    val handoffStore = remember(context) {
+        (context.applicationContext as? SelarasApplication)?.container?.screeningHandoffStore
+    }
+    val handoffFlow = remember(handoffStore) {
+        handoffStore?.selectedResultId ?: flowOf<Long?>(null)
+    }
+    val handoffId by handoffFlow.collectAsState(initial = null)
+    LaunchedEffect(effectiveViewModel, handoffId) {
+        handoffId?.let(effectiveViewModel::acceptHandoffResultId)
+    }
 
     var showSaveSuccessDialog by remember { mutableStateOf(false) }
     var savedLocationMessage by remember { mutableStateOf("") }
@@ -153,8 +159,7 @@ fun CounselorSummaryScreen(
     }
 
     LaunchedEffect(Unit) {
-        // effectiveViewModel.loadRealData()
-        effectiveViewModel.setupDummyDataForExportPdf()
+        effectiveViewModel.loadRealData()
     }
 
     val headerTitle = when (uiState.screenState) {
@@ -191,7 +196,6 @@ fun CounselorSummaryScreen(
             onSupportClick = onNavigateToHelp
         )
 
-        // Main Scrollable Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -422,7 +426,6 @@ private fun SelectContentScreen(
     PeriodBadgeChip(periodText)
     Spacer(modifier = Modifier.height(14.dp))
 
-    // Days Recorded Card
     WeeklyDaysRecordedCard(
         recordedDays = uiState.recordedDays,
         totalDays = uiState.totalDays,
@@ -430,6 +433,24 @@ private fun SelectContentScreen(
         missingDaysText = "Belum tercatat: ${uiState.totalDays - uiState.recordedDays} hari",
         isEligible = true
     )
+
+    if (uiState.handoffResultId != null) {
+        Spacer(modifier = Modifier.height(14.dp))
+        CardItemContainer(containerColor = LavenderCard) {
+            Text(
+                text = "Hasil skrining #${uiState.handoffResultId} telah diterima dari F1.",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = DarkGreenText
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Hasil ini dipilih secara otomatis, tetapi dapat dilepas dari ringkasan.",
+                fontSize = 12.sp,
+                color = MutedGreenText
+            )
+        }
+    }
 
     Spacer(modifier = Modifier.height(20.dp))
     Text(
@@ -503,11 +524,13 @@ private fun SelectContentScreen(
     }
 
     if (displayedScreenings.isEmpty()) {
-        Text(
-            text = "Tidak ada data",
-            fontSize = 12.sp,
-            color = MutedGreenText
-        )
+        CardItemContainer(containerColor = LavenderCard) {
+            Text(
+                text = "Tidak ada data",
+                fontSize = 12.sp,
+                color = MutedGreenText
+            )
+        }
     } else {
         displayedScreenings.forEach { screening ->
             CleanSelectableItem(
@@ -672,9 +695,6 @@ private fun SelectContentScreen(
     }
 }
 
-// -------------------------------------------------------------
-// Sub-screen 2: Ineligible <4 Days
-// -------------------------------------------------------------
 @Composable
 private fun IneligibleScreen(
     uiState: CounselorSummaryUiState,
@@ -736,9 +756,6 @@ private fun IneligibleScreen(
     }
 }
 
-// -------------------------------------------------------------
-// Sub-screen 3: Preparing
-// -------------------------------------------------------------
 @Composable
 private fun PreparingScreen(
     uiState: CounselorSummaryUiState,
@@ -748,7 +765,6 @@ private fun PreparingScreen(
     PeriodBadgeChip("Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}")
     Spacer(modifier = Modifier.height(24.dp))
 
-    // Circular spinner
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(
             color = PineGreen,
@@ -795,9 +811,6 @@ private fun PreparingScreen(
     DisabledCustomButton(text = "Sedang Memproses...")
 }
 
-// -------------------------------------------------------------
-// Sub-screen 4: Preview
-// -------------------------------------------------------------
 @Composable
 private fun PreviewScreen(
     uiState: CounselorSummaryUiState,
@@ -828,7 +841,6 @@ private fun PreviewScreen(
     PeriodBadgeChip("Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}")
     Spacer(modifier = Modifier.height(12.dp))
 
-    // Document Info Card
     DocumentInfoCard(uiState = uiState)
 
     Spacer(modifier = Modifier.height(20.dp))
@@ -840,7 +852,6 @@ private fun PreviewScreen(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    // Check-in Analysis Detail Card
     CardItemContainer(containerColor = Color.White) {
         Text(
             text = "${uiState.recordedDays} dari ${uiState.totalDays} Hari Tercatat",
@@ -1022,9 +1033,6 @@ private fun PreviewScreen(
     OutlinedCustomButton(text = "Ubah Pilihan Data", onClick = onUbahPilihan)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 5: Source Changed
-// -------------------------------------------------------------
 @Composable
 private fun SourceChangedScreen(
     uiState: CounselorSummaryUiState,
@@ -1040,9 +1048,6 @@ private fun SourceChangedScreen(
     PrimaryButton(text = "Perbarui Pratinjau", onClick = onPerbaruiPratinjau)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 6: Generating PDF
-// -------------------------------------------------------------
 @Composable
 private fun GeneratingPdfScreen(
     uiState: CounselorSummaryUiState,
@@ -1081,9 +1086,6 @@ private fun GeneratingPdfScreen(
     DisabledCustomButton(text = "Menyimpan Dokumen...")
 }
 
-// -------------------------------------------------------------
-// Sub-screen 7: PDF Error
-// -------------------------------------------------------------
 @Composable
 private fun PdfErrorScreen(
     uiState: CounselorSummaryUiState,
@@ -1102,9 +1104,6 @@ private fun PdfErrorScreen(
     OutlinedCustomButton(text = "Kembali ke Pratinjau", onClick = onBackToPreview)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 8: Export Success
-// -------------------------------------------------------------
 @Composable
 private fun ExportSuccessScreen(
     uiState: CounselorSummaryUiState,
@@ -1171,9 +1170,6 @@ private fun ExportSuccessScreen(
     OutlinedCustomButton(text = "Kembali ke Beranda", onClick = onKembaliKeRiwayat)
 }
 
-// -------------------------------------------------------------
-// Reusable UI Components
-// -------------------------------------------------------------
 @Composable
 private fun CounselorHeader(
     title: String,
