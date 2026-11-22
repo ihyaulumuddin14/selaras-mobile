@@ -23,15 +23,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -97,6 +100,7 @@ fun ScreeningScreen(
     val uiState by viewModel.uiState.collectAsState()
     val quotaState by viewModel.quotaUiState.collectAsState()
     var selectedType by remember { mutableStateOf<ScreeningType?>(null) }
+    var showExitWarningDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refreshQuota()
@@ -105,6 +109,73 @@ fun ScreeningScreen(
     val resetScreening = {
         selectedType = null
         viewModel.resetScreening()
+    }
+
+    val isSecondStep = uiState.step != ScreeningStep.SELECTION
+
+    BackHandler(enabled = isSecondStep) {
+        when (uiState.step) {
+            ScreeningStep.QUESTIONS, ScreeningStep.INTRODUCTION, ScreeningStep.ERROR -> {
+                showExitWarningDialog = true
+            }
+            ScreeningStep.PROCESSING -> {
+                // Jangan batalkan proses saat sedang menyimpan hasil skrining
+            }
+            ScreeningStep.CRISIS, ScreeningStep.RESULT -> {
+                resetScreening()
+            }
+            ScreeningStep.SELECTION -> {
+                // Di-handle oleh parent BackHandler
+            }
+        }
+    }
+
+    if (showExitWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitWarningDialog = false },
+            title = {
+                Text(
+                    text = "Keluar dari Skrining?",
+                    fontWeight = FontWeight.Bold,
+                    color = ScreeningText
+                )
+            },
+            text = {
+                Text(
+                    text = "Jawaban yang kamu masukkan belum disimpan. Jika kamu keluar sekarang, proses skrining ini tidak akan tersimpan.",
+                    color = ScreeningMuted,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitWarningDialog = false
+                        resetScreening()
+                    }
+                ) {
+                    Text(
+                        text = "Keluar",
+                        color = Color(0xFFBA1A1A),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showExitWarningDialog = false }
+                ) {
+                    Text(
+                        text = "Lanjutkan Skrining",
+                        color = ScreeningPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = Color.White
+        )
     }
 
     when (uiState.step) {
@@ -129,9 +200,8 @@ fun ScreeningScreen(
         ScreeningStep.INTRODUCTION -> {
             ScreeningIntroductionContent(
                 screeningType = uiState.selectedType,
-                onBack = resetScreening,
+                onBack = null,
                 onBegin = viewModel::beginQuestions,
-                onOpenHelp = onOpenHelp,
                 modifier = modifier
             )
         }
@@ -144,13 +214,7 @@ fun ScreeningScreen(
                 canGoToPreviousQuestion = uiState.canGoToPreviousQuestion,
                 canGoToNextQuestion = uiState.canGoToNextQuestion,
                 canSubmit = uiState.canSubmit,
-                onBack = {
-                    if (uiState.canGoToPreviousQuestion) {
-                        viewModel.previousQuestion()
-                    } else {
-                        resetScreening()
-                    }
-                },
+                onBack = null,
                 onSelectAnswer = {
                     viewModel.selectAnswer(
                         questionNumber = uiState.currentQuestionNumber,
@@ -160,7 +224,6 @@ fun ScreeningScreen(
                 onPrevious = viewModel::previousQuestion,
                 onNext = viewModel::nextQuestion,
                 onSubmit = viewModel::submitScreening,
-                onOpenHelp = onOpenHelp,
                 modifier = modifier
             )
         }
@@ -205,24 +268,6 @@ fun ScreeningScreen(
     }
 }
 
-@Composable
-private fun ScreeningHelpAction(onOpenHelp: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(34.dp)
-            .clip(CircleShape)
-            .background(ScreeningPrimaryContainer)
-            .clickable(onClick = onOpenHelp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "?",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = ScreeningPrimary
-        )
-    }
-}
 
 @Composable
 private fun ScreeningSelectionContent(
@@ -291,8 +336,7 @@ private fun ScreeningSelectionContent(
     ) {
         SelarasHeader(
             title = "Skrining",
-            onBack = null,
-            actions = { ScreeningHelpAction(onOpenHelp) }
+            onBack = null
         )
 
         Column(
@@ -519,10 +563,10 @@ private fun ScreeningTypeCard(
 @Composable
 private fun ScreeningIntroductionContent(
     screeningType: ScreeningType?,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onBegin: () -> Unit,
-    onOpenHelp: () -> Unit,
-    modifier: Modifier
+    modifier: Modifier = Modifier,
+    onOpenHelp: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -531,8 +575,7 @@ private fun ScreeningIntroductionContent(
     ) {
         SelarasHeader(
             title = "Skrining",
-            onBack = onBack,
-            actions = { ScreeningHelpAction(onOpenHelp) }
+            onBack = onBack
         )
 
         Column(
@@ -610,13 +653,13 @@ private fun ScreeningQuestionContent(
     canGoToPreviousQuestion: Boolean,
     canGoToNextQuestion: Boolean,
     canSubmit: Boolean,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onSelectAnswer: (Int) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSubmit: () -> Unit,
-    onOpenHelp: () -> Unit,
-    modifier: Modifier
+    modifier: Modifier = Modifier,
+    onOpenHelp: () -> Unit = {}
 ) {
     val isLastQuestion = currentQuestionNumber == 9
 
@@ -639,8 +682,7 @@ private fun ScreeningQuestionContent(
     ) {
         SelarasHeader(
             title = "Skrining PHQ-9",
-            onBack = onBack,
-            actions = { ScreeningHelpAction(onOpenHelp) }
+            onBack = onBack
         )
 
         Column(
@@ -873,8 +915,7 @@ private fun ScreeningProcessingContent(
     ) {
         SelarasHeader(
             title = "Skrining",
-            onBack = null,
-            actions = { ScreeningHelpAction(onOpenHelp) }
+            onBack = null
         )
 
         Column(
@@ -934,8 +975,7 @@ private fun ScreeningErrorContent(
     ) {
         SelarasHeader(
             title = "Kendala",
-            onBack = onReturn,
-            actions = { ScreeningHelpAction(onOpenHelp) }
+            onBack = onReturn
         )
 
         Column(
@@ -1024,8 +1064,7 @@ private fun ScreeningCrisisContent(
     ) {
         SelarasHeader(
             title = "Bantuan & Dukungan",
-            onBack = null,
-            actions = { ScreeningHelpAction(onOpenHelp) }
+            onBack = null
         )
 
         Column(
@@ -1131,8 +1170,7 @@ private fun ScreeningResultContent(
     ) {
         SelarasHeader(
             title = "Hasil Skrining",
-            onBack = onReset,
-            actions = { ScreeningHelpAction(onOpenHelp) }
+            onBack = onReset
         )
 
         Column(

@@ -1,12 +1,14 @@
 package com.example.selaras.features.dashboard.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -83,28 +85,33 @@ fun DashboardHeader(
             }
         }
 
-        // Settings Shortcut Button with Notification Red Bullet Badge
+        // Settings Shortcut Button with Notification Red Bullet Badge (unclipped container to prevent badge cutoff)
         Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(Color.White)
-                .clickable(onClick = onNavigateToSettings),
+            modifier = Modifier.size(44.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = SelarasIcons.Settings,
-                contentDescription = "Pengaturan",
-                tint = textPrimary,
-                modifier = Modifier.size(22.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .clickable(onClick = onNavigateToSettings),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = SelarasIcons.Settings,
+                    contentDescription = "Pengaturan",
+                    tint = textPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
 
             if (hasSettingsBadge) {
                 Box(
                     modifier = Modifier
-                        .size(10.dp)
+                        .size(11.dp)
                         .align(Alignment.TopEnd)
-                        .padding(top = 2.dp, end = 2.dp)
+                        .border(1.5.dp, Color.White, CircleShape)
                         .clip(CircleShape)
                         .background(Color(0xFFE53935))
                 )

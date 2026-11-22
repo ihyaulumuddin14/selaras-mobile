@@ -129,16 +129,23 @@ fun AppNavigation(
     ) { destination ->
         when (destination) {
             SubDestination.NONE -> {
+                val screeningUiState by screeningViewModel.uiState.collectAsState()
+                val isScreeningSecondStep = currentTab == NavTab.SCREENING &&
+                    screeningUiState.step != com.example.selaras.features.screening.ScreeningStep.SELECTION
+                val showBottomBar = !isScreeningSecondStep
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        BottomNavBar(
-                            selectedTab = currentTab,
-                            onTabSelected = { tab ->
-                                currentTab = tab
-                                subDestination = SubDestination.NONE
-                            }
-                        )
+                        if (showBottomBar) {
+                            BottomNavBar(
+                                selectedTab = currentTab,
+                                onTabSelected = { tab ->
+                                    currentTab = tab
+                                    subDestination = SubDestination.NONE
+                                }
+                            )
+                        }
                     }
                 ) { innerPadding ->
                     Box(
@@ -173,6 +180,7 @@ fun AppNavigation(
                                 NavTab.HOME -> {
                                     DashboardScreen(
                                         viewModel = dashboardViewModel,
+                                        isPinSet = container.securityRepository.isPinSet(),
                                         onNavigateToCheckIn = {
                                             checkInViewModel.navigateToNewCheckIn()
                                             currentTab = NavTab.CHECK_IN
