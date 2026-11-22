@@ -12,8 +12,13 @@ import com.example.selaras.core.security.RecoveryManager
 import com.example.selaras.data.datasource.local.AppSettingsLocalDataSource
 import com.example.selaras.data.datasource.local.BreathingLocalDataSource
 import com.example.selaras.data.datasource.local.CheckInLocalDataSource
-import com.example.selaras.data.datasource.remote.FakeBreathingRemoteDataSource
-import com.example.selaras.data.datasource.remote.FakeCheckInRemoteDataSource
+import com.example.selaras.core.security.AuthSessionManager
+import com.example.selaras.data.datasource.remote.HttpBreathingRemoteDataSource
+import com.example.selaras.data.datasource.remote.HttpCheckInRemoteDataSource
+import com.example.selaras.data.datasource.remote.HttpScreeningRemoteDataSource
+import com.example.selaras.data.datasource.remote.SelarasApiClient
+import com.example.selaras.data.sync.ScreeningSyncManager
+import com.example.selaras.data.sync.SyncCoordinator
 import com.example.selaras.data.repository.AppSettingsRepositoryImpl
 import com.example.selaras.data.repository.BreathingRepositoryImpl
 import com.example.selaras.data.repository.CheckInRepositoryImpl
@@ -62,6 +67,10 @@ interface AppContainer {
     val counselorRepository: CounselorRepository
     val checkInSyncManager: CheckInSyncManager
     val breathingSyncManager: BreathingSyncManager
+    val screeningSyncManager: ScreeningSyncManager
+    val syncCoordinator: SyncCoordinator
+    val authSessionManager: AuthSessionManager
+    val apiClient: SelarasApiClient
     val appSettingsRepository: AppSettingsRepository
     val dailyCheckInPromptManager: DailyCheckInPromptManager
     val getScreeningQuotaUseCase: GetScreeningQuotaUseCase
@@ -147,13 +156,19 @@ class DefaultAppContainer(context: Context) : AppContainer {
         CounselorRepositoryImpl(database.counselorSummaryDao())
     }
 
+    override val authSessionManager: AuthSessionManager by lazy {
+        AuthSessionManager(appContext)
+    }
+
+    override val apiClient: SelarasApiClient by lazy {
+        SelarasApiClient()
+    }
+
     override val checkInSyncManager: CheckInSyncManager by lazy {
         val localDataSource = CheckInLocalDataSource(
             database.checkInDao()
         )
-
-        val remoteDataSource = FakeCheckInRemoteDataSource()
-
+        val remoteDataSource = HttpCheckInRemoteDataSource(apiClient, authSessionManager)
         CheckInSyncManager(
             localDataSource,
             remoteDataSource
@@ -164,12 +179,27 @@ class DefaultAppContainer(context: Context) : AppContainer {
         val localDataSource = BreathingLocalDataSource(
             database.customBreathingPatternDao()
         )
-
-        val remoteDataSource = FakeBreathingRemoteDataSource()
-
+        val remoteDataSource = HttpBreathingRemoteDataSource(apiClient, authSessionManager)
         BreathingSyncManager(
             localDataSource,
             remoteDataSource
+        )
+    }
+
+    override val screeningSyncManager: ScreeningSyncManager by lazy {
+        ScreeningSyncManager(
+            screeningResultDao = database.screeningResultDao(),
+            screeningAnswerDao = database.screeningAnswerDao(),
+            remoteDataSource = HttpScreeningRemoteDataSource(apiClient, authSessionManager)
+        )
+    }
+
+    override val syncCoordinator: SyncCoordinator by lazy {
+        SyncCoordinator(
+            checkInSyncManager = checkInSyncManager,
+            breathingSyncManager = breathingSyncManager,
+            screeningSyncManager = screeningSyncManager,
+            authSessionManager = authSessionManager
         )
     }
 
