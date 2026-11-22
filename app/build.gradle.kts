@@ -72,9 +72,9 @@ dependencies {
     implementation(libs.androidx.sqlite)
 
     // Networking (Retrofit 2 & OkHttp 3)
-    implementation(libs.retrofit)
+    implementation(libs.retrofit.core)
     implementation(libs.retrofit.converter.gson)
-    implementation(libs.okhttp)
+    implementation(libs.okhttp.core)
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
 
