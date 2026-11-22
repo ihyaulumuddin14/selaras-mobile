@@ -2,10 +2,18 @@
 
 package com.example.selaras.features.counselor
 
+import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +44,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -102,8 +112,7 @@ fun CounselorSummaryScreen(
                 counselorRepository = container.counselorRepository,
                 createSummaryUseCase = createUseCase,
                 getEligibilityUseCase = eligibilityUseCase,
-                appSettingsRepository = container.appSettingsRepository,
-                autoLoad = true
+                appSettingsRepository = container.appSettingsRepository
             )
         } else {
             CounselorSummaryViewModel.createPreviewInstance()
@@ -120,6 +129,37 @@ fun CounselorSummaryScreen(
     val handoffId by handoffFlow.collectAsState(initial = null)
     LaunchedEffect(effectiveViewModel, handoffId) {
         handoffId?.let(effectiveViewModel::acceptHandoffResultId)
+    }
+
+    var showSaveSuccessDialog by remember { mutableStateOf(false) }
+    var savedLocationMessage by remember { mutableStateOf("") }
+    var savedFileUri by remember { mutableStateOf<Uri?>(null) }
+
+    val defaultFileName = "Serasi · Ringkasan Mingguan.pdf"
+
+    val saveDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val file = uiState.generatedPdfFile
+            if (file != null && file.exists()) {
+                val copyResult = copyPdfToUri(context, file, uri)
+                if (copyResult.isSuccess) {
+                    savedFileUri = uri
+                    savedLocationMessage = "Penyimpanan Perangkat (${uri.lastPathSegment ?: "Folder Terpilih"})"
+                    showSaveSuccessDialog = true
+                    Toast.makeText(context, "Dokumen PDF berhasil disimpan ke penyimpanan lokal", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, "Gagal menyimpan berkas: ${copyResult.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Toast.makeText(context, "Berkas PDF tidak ditemukan", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        effectiveViewModel.loadRealData()
     }
 
     val headerTitle = when (uiState.screenState) {
@@ -223,7 +263,27 @@ fun CounselorSummaryScreen(
                     ExportSuccessScreen(
                         uiState = uiState,
                         onSimpanPdf = {
-                            Toast.makeText(context, "Dokumen PDF berhasil disimpan di penyimpanan lokal aplikasi", Toast.LENGTH_SHORT).show()
+                            val file = uiState.generatedPdfFile
+                            if (file != null && file.exists()) {
+                                val saveResult = savePdfToPublicDownloads(context, file, defaultFileName)
+                                if (saveResult.isSuccess) {
+                                    savedFileUri = saveResult.getOrNull()
+                                    savedLocationMessage = "Folder Download (Penyimpanan Perangkat)"
+                                    showSaveSuccessDialog = true
+                                    Toast.makeText(context, "Dokumen PDF berhasil disimpan di folder Download", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    try {
+                                        saveDocumentLauncher.launch(defaultFileName)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Gagal menyimpan berkas: ${saveResult.exceptionOrNull()?.message ?: e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            } else {
+                                Toast.makeText(context, "Dokumen PDF sedang disiapkan, silakan tunggu...", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onBukaPdf = {
+                            openPdf(context, uiState.generatedPdfFile, savedFileUri)
                         },
                         onPilihCaraBerbagi = {
                             sharePdf(context, uiState.generatedPdfFile)
@@ -232,6 +292,111 @@ fun CounselorSummaryScreen(
                         onSupportClick = onNavigateToHelp
                     )
                 }
+            }
+
+            if (showSaveSuccessDialog) {
+                AlertDialog(
+                    onDismissRequest = { showSaveSuccessDialog = false },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(PineGreen),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Dokumen PDF Tersimpan",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DarkGreenText
+                            )
+                        }
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Berkas ringkasan mingguan konselor telah berhasil disimpan secara permanen di penyimpanan lokal ponselmu.",
+                                fontSize = 13.sp,
+                                color = DarkGreenText,
+                                lineHeight = 18.sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = LightSageGreen,
+                                border = BorderStroke(1.dp, CardBorder)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = "📁 Lokasi: $savedLocationMessage",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = DarkGreenText
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "📄 Nama Berkas: $defaultFileName",
+                                        fontSize = 12.sp,
+                                        color = MutedGreenText
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Kamu dapat membuka berkas langsung dengan aplikasi pembaca PDF, atau memilih folder penyimpanan lain jika ingin menyimpan di lokasi khusus.",
+                                fontSize = 11.sp,
+                                color = MutedGreenText,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showSaveSuccessDialog = false
+                                openPdf(context, uiState.generatedPdfFile, savedFileUri)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PineGreen)
+                        ) {
+                            Text("Buka Berkas PDF", color = Color.White, fontSize = 13.sp)
+                        }
+                    },
+                    dismissButton = {
+                        Row {
+                            OutlinedButton(
+                                onClick = {
+                                    showSaveSuccessDialog = false
+                                    try {
+                                        saveDocumentLauncher.launch(defaultFileName)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Tidak dapat membuka pemilih berkas: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                Text("Pilih Folder Lain...", color = PineGreen, fontSize = 13.sp)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            TextButton(onClick = { showSaveSuccessDialog = false }) {
+                                Text("Tutup", color = MutedGreenText, fontSize = 13.sp)
+                            }
+                        }
+                    },
+                    containerColor = CanvasBackground
+                )
             }
 
             Spacer(modifier = Modifier.height(36.dp))
@@ -306,7 +471,10 @@ private fun SelectContentScreen(
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(0.5f)
+            ,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -327,19 +495,10 @@ private fun SelectContentScreen(
                 Text(
                     text = "Analisis suasana hati, tidur, & energi (${uiState.recordedDays} dari ${uiState.totalDays} hari)",
                     fontSize = 12.sp,
-                    color = MutedGreenText
+                    color = MutedGreenText,
+                    lineHeight = 17.sp
                 )
             }
-            Text(
-                text = "Wajib",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = PineGreen,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.White)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
         }
     }
 
@@ -354,16 +513,26 @@ private fun SelectContentScreen(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    if (uiState.availableScreenings.isEmpty()) {
+    // Aturan seleksi skrining:
+    // - Maksimal 7 data terbaru sesuai current created_at
+    // - Jika tidak ada data skrining tampilkan tidak ada data
+    // - Jika <= 7 tampilkan semua
+    // - Jika > 7 tampilkan 7 terbarunya sesuai current created_at
+    val displayedScreenings = remember(uiState.availableScreenings) {
+        val sorted = uiState.availableScreenings.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
+
+    if (displayedScreenings.isEmpty()) {
         CardItemContainer(containerColor = LavenderCard) {
             Text(
-                text = "Tidak ada hasil skrining pada periode ini.",
+                text = "Tidak ada data",
                 fontSize = 12.sp,
                 color = MutedGreenText
             )
         }
     } else {
-        uiState.availableScreenings.forEach { screening ->
+        displayedScreenings.forEach { screening ->
             CleanSelectableItem(
                 checked = screening.isSelected,
                 onCheckedChange = { onToggleScreening(screening.id, it) },
@@ -385,6 +554,18 @@ private fun SelectContentScreen(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
+    // Aturan seleksi catatan pribadi:
+    // - Maksimal 7 data terbaru sesuai current created_at
+    // - Jika tidak ada data tampilkan tidak ada data
+    // - Jika <= 7 tampilkan semua
+    // - Jika > 7 tampilkan 7 terbarunya sesuai current created_at
+    val displayedNotes = remember(uiState.availableNotes) {
+        val sorted = uiState.availableNotes.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
+
+    val selectedNotesCount = displayedNotes.count { it.isSelected }
+
     // Master Toggle Checkbox for Personal Notes
     CleanSelectableItem(
         checked = uiState.includePersonalNotes,
@@ -394,16 +575,10 @@ private fun SelectContentScreen(
     )
 
     if (uiState.includePersonalNotes) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Column(modifier = Modifier.padding(start = 16.dp)) {
-            if (uiState.availableNotes.isEmpty()) {
-                Text(
-                    text = "Tidak ada catatan refleksi pada periode ini.",
-                    fontSize = 12.sp,
-                    color = MutedGreenText
-                )
-            } else {
-                uiState.availableNotes.forEach { noteItem ->
+        if (displayedNotes.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Column(modifier = Modifier.padding(start = 16.dp)) {
+                displayedNotes.forEach { noteItem ->
                     CleanSelectableItem(
                         checked = noteItem.isSelected,
                         onCheckedChange = { onToggleNote(noteItem.date, it) },
@@ -413,6 +588,14 @@ private fun SelectContentScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
+        } else {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Tidak ada data",
+                fontSize = 12.sp,
+                color = MutedGreenText,
+                modifier = Modifier.padding(start = 16.dp)
+            )
         }
     }
 
@@ -506,7 +689,6 @@ private fun SelectContentScreen(
             subtitle = note.date.format(periodFmt),
             details = listOf(
                 "Isi Catatan" to "\"${note.noteText}\"",
-                "Keterangan" to "Hanya catatan yang kamu centang yang akan dimasukkan ke dalam dokumen ringkasan untuk konselor."
             ),
             onDismiss = { selectedNoteForInfo = null }
         )
@@ -627,9 +809,6 @@ private fun PreparingScreen(
 
     Spacer(modifier = Modifier.height(24.dp))
     DisabledCustomButton(text = "Sedang Memproses...")
-
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
 @Composable
@@ -745,11 +924,16 @@ private fun PreviewScreen(
     Text(
         text = "Hasil skrining ditampilkan terpisah dari data harian dan tidak digabung menjadi diagnosis medis.",
         fontSize = 11.sp,
-        color = MutedGreenText
+        color = MutedGreenText,
+        lineHeight = 17.sp
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    val selectedScreenings = uiState.availableScreenings.filter { it.isSelected }
+    val displayedScreenings = remember(uiState.availableScreenings) {
+        val sorted = uiState.availableScreenings.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
+    val selectedScreenings = displayedScreenings.filter { it.isSelected }
     if (selectedScreenings.isEmpty()) {
         CardItemContainer(containerColor = Color.White) {
             Text(
@@ -785,7 +969,11 @@ private fun PreviewScreen(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    val selectedNotes = uiState.availableNotes.filter { it.isSelected }
+    val displayedNotes = remember(uiState.availableNotes) {
+        val sorted = uiState.availableNotes.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
+    val selectedNotes = displayedNotes.filter { it.isSelected }
     if (!uiState.includePersonalNotes || selectedNotes.isEmpty()) {
         CardItemContainer(containerColor = Color.White) {
             Text(
@@ -833,7 +1021,7 @@ private fun PreviewScreen(
 
     Spacer(modifier = Modifier.height(16.dp))
     Text(
-        text = "Periksa seluruh isi dokumen sebelum mengekspor. Berkas PDF baru akan dibuat saat kamu menekan tombol di bawah.",
+        text = "Periksa seluruh isi dokumen sebelum mengekspor.",
         fontSize = 11.sp,
         color = MutedGreenText,
         lineHeight = 16.sp
@@ -843,9 +1031,6 @@ private fun PreviewScreen(
     PrimaryButton(text = "Ekspor ke File PDF", onClick = onExportPdf)
     Spacer(modifier = Modifier.height(10.dp))
     OutlinedCustomButton(text = "Ubah Pilihan Data", onClick = onUbahPilihan)
-
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
 @Composable
@@ -861,8 +1046,6 @@ private fun SourceChangedScreen(
     Spacer(modifier = Modifier.height(14.dp))
 
     PrimaryButton(text = "Perbarui Pratinjau", onClick = onPerbaruiPratinjau)
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
 @Composable
@@ -901,9 +1084,6 @@ private fun GeneratingPdfScreen(
 
     Spacer(modifier = Modifier.height(24.dp))
     DisabledCustomButton(text = "Menyimpan Dokumen...")
-
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
 @Composable
@@ -922,14 +1102,13 @@ private fun PdfErrorScreen(
     PrimaryButton(text = "Coba Lagi", onClick = onRetryExport)
     Spacer(modifier = Modifier.height(10.dp))
     OutlinedCustomButton(text = "Kembali ke Pratinjau", onClick = onBackToPreview)
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
 @Composable
 private fun ExportSuccessScreen(
     uiState: CounselorSummaryUiState,
     onSimpanPdf: () -> Unit,
+    onBukaPdf: () -> Unit,
     onPilihCaraBerbagi: () -> Unit,
     onKembaliKeRiwayat: () -> Unit,
     onSupportClick: () -> Unit
@@ -975,6 +1154,8 @@ private fun ExportSuccessScreen(
     Spacer(modifier = Modifier.height(20.dp))
     PrimaryButton(text = "Simpan ke File", onClick = onSimpanPdf)
     Spacer(modifier = Modifier.height(10.dp))
+    OutlinedCustomButton(text = "Buka Berkas PDF", onClick = onBukaPdf)
+    Spacer(modifier = Modifier.height(10.dp))
     OutlinedCustomButton(text = "Bagikan Berkas (Kirim ke Konselor)", onClick = onPilihCaraBerbagi)
 
     Spacer(modifier = Modifier.height(10.dp))
@@ -987,8 +1168,6 @@ private fun ExportSuccessScreen(
 
     Spacer(modifier = Modifier.height(14.dp))
     OutlinedCustomButton(text = "Kembali ke Beranda", onClick = onKembaliKeRiwayat)
-    Spacer(modifier = Modifier.height(12.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
 @Composable
@@ -1265,9 +1444,11 @@ private fun DocumentInfoCard(uiState: CounselorSummaryUiState) {
             color = DarkGreenText
         )
         Spacer(modifier = Modifier.height(4.dp))
-        val scCount = uiState.availableScreenings.count { it.isSelected }
+        val displayedScreenings = uiState.availableScreenings.sortedByDescending { it.createdAt }.let { if (it.size > 7) it.take(7) else it }
+        val displayedNotes = uiState.availableNotes.sortedByDescending { it.createdAt }.let { if (it.size > 7) it.take(7) else it }
+        val scCount = displayedScreenings.count { it.isSelected }
         val screeningsOption = if (scCount > 0) "$scCount hasil skrining disertakan" else "Tidak menyertakan hasil skrining"
-        val notesCount = uiState.availableNotes.count { it.isSelected }
+        val notesCount = displayedNotes.count { it.isSelected }
         val noteOption = if (uiState.includePersonalNotes && notesCount > 0) "$notesCount catatan refleksi disertakan" else "Catatan pribadi tidak disertakan"
 
         val userNameLine = if (!uiState.userName.isNullOrBlank()) "Nama Klien: ${uiState.userName}\n" else "Nama Klien: Belum diatur\n"
@@ -1402,4 +1583,87 @@ private fun sharePdf(context: Context, file: File?) {
     } catch (e: Exception) {
         Toast.makeText(context, "Tidak dapat membagikan dokumen: ${e.message}", Toast.LENGTH_SHORT).show()
     }
+}
+
+private fun openPdf(context: Context, file: File?, uri: Uri? = null) {
+    val targetUri: Uri? = uri ?: if (file != null && file.exists()) {
+        try {
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+        } catch (e: Exception) {
+            null
+        }
+    } else null
+
+    if (targetUri == null) {
+        Toast.makeText(context, "Dokumen PDF belum tersedia untuk dibuka", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(targetUri, "application/pdf")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(viewIntent, "Buka Ringkasan Konselor"))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, "Tidak ditemukan aplikasi pembaca PDF di perangkat ini", Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "Gagal membuka dokumen: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun savePdfToPublicDownloads(
+    context: Context,
+    sourceFile: File,
+    targetFileName: String
+): Result<Uri> = runCatching {
+    if (!sourceFile.exists()) {
+        throw IllegalStateException("Dokumen PDF sumber tidak ditemukan.")
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val resolver = context.contentResolver
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, targetFileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            ?: throw IllegalStateException("Gagal membuat entri berkas di folder Download.")
+
+        resolver.openOutputStream(uri)?.use { outputStream ->
+            sourceFile.inputStream().use { inputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        } ?: throw IllegalStateException("Gagal menulis data ke berkas Download.")
+        uri
+    } else {
+        @Suppress("DEPRECATION")
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!downloadsDir.exists()) {
+            downloadsDir.mkdirs()
+        }
+        val destFile = File(downloadsDir, targetFileName)
+        sourceFile.copyTo(destFile, overwrite = true)
+        Uri.fromFile(destFile)
+    }
+}
+
+private fun copyPdfToUri(
+    context: Context,
+    sourceFile: File,
+    destinationUri: Uri
+): Result<Unit> = runCatching {
+    if (!sourceFile.exists()) {
+        throw IllegalStateException("Dokumen PDF sumber tidak ditemukan.")
+    }
+    context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+        sourceFile.inputStream().use { inputStream ->
+            inputStream.copyTo(outputStream)
+        }
+    } ?: throw IllegalStateException("Gagal membuka aliran penyimpanan tujuan.")
 }

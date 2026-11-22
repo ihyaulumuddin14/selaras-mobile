@@ -293,13 +293,14 @@ private fun AlreadyCheckedInView(
 
                     if (!today.note.isNullOrBlank()) {
                         HorizontalDivider(Modifier.padding(vertical = 10.dp), color = CheckInColors.CardBorder)
-                        Text("Catatan Refleksi:", fontSize = 13.sp, color = CheckInColors.TextSecondary)
+                        Text("Catatan Refleksi:", fontSize = 13.sp, color = CheckInColors.TextSecondary, lineHeight = 17.sp
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = today.note,
                             fontSize = 14.sp,
                             color = CheckInColors.TextPrimary,
-                            lineHeight = 20.sp
+                            lineHeight = 17.sp
                         )
                     }
                 }
@@ -1190,9 +1191,9 @@ private fun WeeklyAnalysisTabContent(
                         Column {
                             Text(
                                 text = if (activeAnalysis.isEligibleForCounselorSummary)
-                                    "Syarat Ringkasan Konselor (F4) Terpenuhi"
+                                    "Syarat Ringkasan Konselor Terpenuhi"
                                 else
-                                    "Menuju Kelayakan Ringkasan Konselor (F4)",
+                                    "Menuju Kelayakan Ringkasan Konselor",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = CheckInColors.TextPrimary
@@ -1203,7 +1204,8 @@ private fun WeeklyAnalysisTabContent(
                                 else
                                     "Butuh ${4 - activeAnalysis.totalDaysRecorded} hari pencatatan lagi untuk mencapai syarat minimal 4 hari.",
                                 fontSize = 12.sp,
-                                color = CheckInColors.TextSecondary
+                                color = CheckInColors.TextSecondary,
+                                lineHeight = 17.sp
                             )
                         }
                     }

@@ -83,7 +83,7 @@ fun DashboardHeader(
             }
         }
 
-        // Settings Shortcut Button
+        // Settings Shortcut Button with Notification Red Bullet Badge
         Box(
             modifier = Modifier
                 .size(44.dp)

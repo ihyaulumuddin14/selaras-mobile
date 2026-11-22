@@ -258,10 +258,7 @@ class ExportCounselorSummaryPdfUseCase {
                 val type = sc.optString("type", "Skrining PHQ-9")
                 val dateStr = sc.optString("date").ifEmpty { periodStr }
                 val score = sc.optInt("score", 0)
-                val rawCat = sc.optString("category", "Gejala Ringan")
-                val instrument = sc.optString("instrumentVersion", "")
-                val isDemo = instrument.startsWith("DEMO-", ignoreCase = true)
-                val cat = if (isDemo) "Demo (simulasi)" else rawCat
+                val cat = sc.optString("category", "Gejala Ringan")
 
                 val rowH = 20f
                 fillPaint.color = if (i % 2 == 1) tableAltRow else Color.WHITE
