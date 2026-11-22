@@ -25,6 +25,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -51,6 +53,8 @@ import com.example.selaras.features.breathing.BreathingColors
 @Composable
 fun SettingsScreen(
     isPinSet: Boolean = false,
+    userName: String? = null,
+    onUpdateUserName: (String) -> Unit = {},
     onNavigateBack: () -> Unit = {},
     onResetPin: () -> Unit = {},
     onDeleteAllData: () -> Unit = {},
@@ -67,6 +71,8 @@ fun SettingsScreen(
 
     var isReminderEnabled by remember { mutableStateOf(true) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var nameInput by remember(userName) { mutableStateOf(userName.orEmpty()) }
 
     Column(
         modifier = modifier
@@ -85,6 +91,82 @@ fun SettingsScreen(
                 .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Section 0: Profil & Nama Pengguna
+            Text(
+                text = "Profil Pengguna",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = textPrimary
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White)
+                    .border(1.dp, cardBorder, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Nama Pengguna",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textPrimary
+                            )
+                            if (userName.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFE53935))
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (!userName.isNullOrBlank()) {
+                                userName
+                            } else {
+                                "Belum diatur (Wajib untuk ringkasan konselor)"
+                            },
+                            fontSize = 12.sp,
+                            color = if (!userName.isNullOrBlank()) pineGreen else Color(0xFFE53935)
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            nameInput = userName.orEmpty()
+                            showNameDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryContainer,
+                            contentColor = pineGreen
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Text(
+                            text = if (!userName.isNullOrBlank()) "Ubah Nama" else "Atur Nama",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Section 1: Keamanan & Kunci Aplikasi
         Text(
@@ -240,6 +322,69 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+
+        // Dialog Atur/Ubah Nama Pengguna
+        if (showNameDialog) {
+            AlertDialog(
+                onDismissRequest = { showNameDialog = false },
+                title = {
+                    Text(
+                        text = if (!userName.isNullOrBlank()) "Ubah Nama Pengguna" else "Atur Nama Pengguna",
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimary
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "Nama ini akan digunakan untuk menyapa di Beranda dan dicantumkan pada dokumen PDF Ringkasan untuk Konselor.",
+                            fontSize = 13.sp,
+                            color = textSecondary,
+                            lineHeight = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = nameInput,
+                            onValueChange = { nameInput = it },
+                            label = { Text("Nama Lengkap / Panggilan") },
+                            placeholder = { Text("Contoh: Ahmad Pratama") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = pineGreen,
+                                focusedLabelColor = pineGreen,
+                                cursorColor = pineGreen
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val trimmed = nameInput.trim()
+                            if (trimmed.isNotBlank()) {
+                                onUpdateUserName(trimmed)
+                                showNameDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = pineGreen,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text("Simpan", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNameDialog = false }) {
+                        Text("Batal", color = textSecondary)
+                    }
+                },
+                containerColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            )
         }
 
         if (showDeleteDialog) {

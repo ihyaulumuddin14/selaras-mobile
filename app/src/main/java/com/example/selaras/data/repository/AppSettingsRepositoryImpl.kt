@@ -88,6 +88,21 @@ class AppSettingsRepositoryImpl(
         localDataSource.upsertSettings(updated)
     }
 
+    override suspend fun updateUserName(name: String?): Result<Unit> = runCatching {
+        val now = Instant.now()
+        val current = localDataSource.getSettings() ?: AppSettingsEntity(
+            id = AppSettingsEntity.SINGLETON_ID,
+            firstActivatedAt = now,
+            createdAt = now,
+            updatedAt = now
+        )
+        val updated = current.copy(
+            userName = name?.trim()?.ifEmpty { null },
+            updatedAt = now
+        )
+        localDataSource.upsertSettings(updated)
+    }
+
     private fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
         id = id,
         firstActivatedAt = firstActivatedAt,
@@ -95,6 +110,7 @@ class AppSettingsRepositoryImpl(
         consentAcceptedAt = consentAcceptedAt,
         checkinReminderEnabled = checkinReminderEnabled,
         checkinReminderTime = checkinReminderTime,
+        userName = userName,
         createdAt = createdAt,
         updatedAt = updatedAt
     )

@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -80,6 +81,7 @@ fun CounselorSummaryScreen(
     onNavigateBack: () -> Unit = {},
     onNavigateToHelp: () -> Unit = {},
     onNavigateToCheckIn: () -> Unit = onNavigateBack,
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: CounselorSummaryViewModel? = null
 ) {
@@ -100,6 +102,7 @@ fun CounselorSummaryScreen(
                 counselorRepository = container.counselorRepository,
                 createSummaryUseCase = createUseCase,
                 getEligibilityUseCase = eligibilityUseCase,
+                appSettingsRepository = container.appSettingsRepository,
                 autoLoad = true
             )
         } else {
@@ -169,6 +172,7 @@ fun CounselorSummaryScreen(
                         onToggleIncludeNotes = { effectiveViewModel.toggleIncludeNotes(it) },
                         onToggleNote = { date, checked -> effectiveViewModel.toggleNoteItem(date, checked) },
                         onCreateSummary = { effectiveViewModel.createSummary() },
+                        onNavigateToSettings = onNavigateToSettings,
                         onSupportClick = onNavigateToHelp
                     )
                 }
@@ -245,10 +249,12 @@ private fun SelectContentScreen(
     onToggleIncludeNotes: (Boolean) -> Unit,
     onToggleNote: (LocalDate, Boolean) -> Unit,
     onCreateSummary: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onSupportClick: () -> Unit
 ) {
     var selectedScreeningForInfo by remember { mutableStateOf<CounselorScreeningUiItem?>(null) }
     var selectedNoteForInfo by remember { mutableStateOf<CounselorNoteUiItem?>(null) }
+    var showNameRequiredDialog by remember { mutableStateOf(false) }
 
     val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
     val periodText = "Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}"
@@ -411,7 +417,16 @@ private fun SelectContentScreen(
     }
 
     Spacer(modifier = Modifier.height(20.dp))
-    PrimaryButton(text = "Buat Ringkasan Mingguan (PDF)", onClick = onCreateSummary)
+    PrimaryButton(
+        text = "Buat Ringkasan Mingguan (PDF)",
+        onClick = {
+            if (uiState.userName.isNullOrBlank()) {
+                showNameRequiredDialog = true
+            } else {
+                onCreateSummary()
+            }
+        }
+    )
 
     Spacer(modifier = Modifier.height(12.dp))
     Text(
@@ -422,6 +437,50 @@ private fun SelectContentScreen(
     )
     Spacer(modifier = Modifier.height(16.dp))
     OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
+
+    // Popup Dialog Peringatan Nama Belum Diatur dengan Shortcut ke Settings
+    if (showNameRequiredDialog) {
+        AlertDialog(
+            onDismissRequest = { showNameRequiredDialog = false },
+            title = {
+                Text(
+                    text = "Nama Pengguna Belum Diatur",
+                    fontWeight = FontWeight.Bold,
+                    color = DarkGreenText
+                )
+            },
+            text = {
+                Text(
+                    text = "Nama diperlukan agar dokumen ringkasan untuk konselor dapat memuat identitasmu dengan jelas. Silakan atur nama terlebih dahulu di menu Pengaturan.",
+                    fontSize = 13.sp,
+                    color = MutedGreenText,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNameRequiredDialog = false
+                        onNavigateToSettings()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PineGreen,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text("Buka Pengaturan", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameRequiredDialog = false }) {
+                    Text("Nanti Saja", color = MutedGreenText)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 
     // Popup Info Skrining
     if (selectedScreeningForInfo != null) {
@@ -1211,8 +1270,9 @@ private fun DocumentInfoCard(uiState: CounselorSummaryUiState) {
         val notesCount = uiState.availableNotes.count { it.isSelected }
         val noteOption = if (uiState.includePersonalNotes && notesCount > 0) "$notesCount catatan refleksi disertakan" else "Catatan pribadi tidak disertakan"
 
+        val userNameLine = if (!uiState.userName.isNullOrBlank()) "Nama Klien: ${uiState.userName}\n" else "Nama Klien: Belum diatur\n"
         Text(
-            text = "Waktu Pembuatan: ${uiState.createdTimeString.ifEmpty { "Terkini" }}\nPeriode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}\nData Check-in: ${uiState.recordedDays} hari valid\nLampiran Skrining: $screeningsOption\nLampiran Catatan: $noteOption\nIsi dokumen PDF sama persis dengan pratinjau ini.",
+            text = "${userNameLine}Waktu Pembuatan: ${uiState.createdTimeString.ifEmpty { "Terkini" }}\nPeriode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}\nData Check-in: ${uiState.recordedDays} hari valid\nLampiran Skrining: $screeningsOption\nLampiran Catatan: $noteOption\nIsi dokumen PDF sama persis dengan pratinjau ini.",
             fontSize = 11.sp,
             color = MutedGreenText,
             lineHeight = 17.sp

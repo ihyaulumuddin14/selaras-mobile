@@ -12,6 +12,7 @@ import com.example.selaras.domain.model.ScreeningAnswer
 import com.example.selaras.domain.model.ScreeningCategory
 import com.example.selaras.domain.model.ScreeningResult
 import com.example.selaras.domain.model.ScreeningType
+import com.example.selaras.domain.repository.AppSettingsRepository
 import com.example.selaras.domain.repository.CheckInRepository
 import com.example.selaras.domain.repository.CounselorRepository
 import com.example.selaras.domain.repository.ScreeningRepository
@@ -105,6 +106,7 @@ data class CounselorSummaryUiState(
     val previewSummary: CounselorSummary? = null,
     val createdSummary: CounselorSummary? = null,
     val isTodayCheckedIn: Boolean = false,
+    val userName: String? = null,
     val snapshotId: String = "S-01",
     val sourceRevision: String = "r4",
     val createdTimeString: String = "",
@@ -119,6 +121,7 @@ class CounselorSummaryViewModel(
     private val createSummaryUseCase: CreateCounselorSummaryUseCase,
     private val getEligibilityUseCase: GetCounselorEligibilityUseCase,
     private val exportPdfUseCase: ExportCounselorSummaryPdfUseCase = ExportCounselorSummaryPdfUseCase(),
+    private val appSettingsRepository: AppSettingsRepository? = null,
     private val previewMode: Boolean = false,
     private val autoLoad: Boolean = false
 ) : ViewModel() {
@@ -371,6 +374,16 @@ class CounselorSummaryViewModel(
                         }
                     }
                 }
+        }
+
+        appSettingsRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.getSettingsFlow()
+                    .catch { /* ignore */ }
+                    .collect { settings ->
+                        _uiState.update { it.copy(userName = settings?.userName) }
+                    }
+            }
         }
     }
 
@@ -633,7 +646,7 @@ class CounselorSummaryViewModel(
 
                 val fileName = "Selaras-Ringkasan-${System.currentTimeMillis()}.pdf"
                 val file = withContext(Dispatchers.IO) {
-                    exportPdfUseCase(context, finalSummary, fileName).getOrThrow()
+                    exportPdfUseCase(context, finalSummary, fileName, userName = currentState.userName).getOrThrow()
                 }
 
                 _uiState.update {
@@ -768,6 +781,7 @@ class CounselorSummaryViewModel(
         return """
         {
             "snapshotId": "${state.snapshotId}",
+            "userName": "${state.userName.orEmpty()}",
             "createdAt": "${Instant.now()}",
             "periodStartDate": "${state.periodStartDate}",
             "periodEndDate": "${state.periodEndDate}",
@@ -787,7 +801,8 @@ class CounselorSummaryViewModel(
         fun provideFactory(
             checkInRepository: CheckInRepository,
             screeningRepository: ScreeningRepository,
-            counselorRepository: CounselorRepository
+            counselorRepository: CounselorRepository,
+            appSettingsRepository: AppSettingsRepository? = null
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -799,6 +814,7 @@ class CounselorSummaryViewModel(
                     counselorRepository = counselorRepository,
                     createSummaryUseCase = createUseCase,
                     getEligibilityUseCase = eligibilityUseCase,
+                    appSettingsRepository = appSettingsRepository,
                     autoLoad = true
                 ) as T
             }
