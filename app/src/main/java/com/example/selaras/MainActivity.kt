@@ -202,6 +202,8 @@ fun MainApp(
                             }
                             dashboardViewModel.refresh()
                             checkInViewModel.setTab(CheckInTab.TODAY)
+                            screeningViewModel.resetScreening()
+                            container.screeningHandoffStore.clear()
                             onboardingViewModel.resetToOnboarding()
                             rootDestination = AppRootDestination.ONBOARDING
                         }
