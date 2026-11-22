@@ -1,394 +1,150 @@
 package com.example.selaras.data.datasource.remote
 
 import com.example.selaras.data.datasource.remote.dto.*
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 
 /**
- * Standard HTTP REST API Client communicating with the Node.js/Express Selaras Backend.
- * Uses native java.net.HttpURLConnection and org.json for zero external dependencies.
+ * Standard REST API Client for Selaras, powered by Retrofit 2 and OkHttp 3.
  */
 class SelarasApiClient(
-    private val baseUrl: String = DEFAULT_BASE_URL
+    baseUrl: String = DEFAULT_BASE_URL,
+    customOkHttpClient: OkHttpClient? = null,
+    val apiService: SelarasApiService = createRetrofitService(baseUrl, customOkHttpClient)
 ) {
 
     suspend fun register(
         request: RegisterRequestDto
     ): Result<AuthResponseDto> = withContext(Dispatchers.IO) {
-        val payload = JSONObject().apply {
-            put("email", request.email)
-            put("password", request.password)
-            if (!request.userName.isNullOrBlank()) {
-                put("userName", request.userName)
-            }
-        }
-
-        executeRequest(
-            endpoint = "/auth/register",
-            method = "POST",
-            body = payload.toString(),
-            token = null
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            parseAuthResponse(data)
-        }
+        safeApiCall { apiService.register(request) }
     }
 
     suspend fun login(
         request: LoginRequestDto
     ): Result<AuthResponseDto> = withContext(Dispatchers.IO) {
-        val payload = JSONObject().apply {
-            put("email", request.email)
-            put("password", request.password)
-        }
+        safeApiCall { apiService.login(request) }
+    }
 
-        executeRequest(
-            endpoint = "/auth/login",
-            method = "POST",
-            body = payload.toString(),
-            token = null
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            parseAuthResponse(data)
-        }
+    suspend fun getMe(
+        token: String
+    ): Result<AuthUserDto> = withContext(Dispatchers.IO) {
+        safeApiCall { apiService.getMe(formatBearer(token)) }
     }
 
     suspend fun pushCheckIns(
         token: String,
         request: SyncCheckInBatchRequestDto
     ): Result<SyncCheckInBatchResponseDto> = withContext(Dispatchers.IO) {
-        val itemsArray = JSONArray()
-        for (item in request.items) {
-            val obj = JSONObject().apply {
-                put("uuid", item.uuid)
-                put("checkInDate", item.checkInDate)
-                put("mood", item.mood)
-                put("energy", item.energy)
-                put("sleepDurationMinutes", item.sleepDurationMinutes)
-                put("note", item.note ?: JSONObject.NULL)
-                put("isDeleted", item.isDeleted)
-                put("createdAt", item.createdAt)
-                put("updatedAt", item.updatedAt)
-            }
-            itemsArray.put(obj)
-        }
-
-        val payload = JSONObject().apply {
-            put("clientTimestamp", request.clientTimestamp)
-            put("items", itemsArray)
-        }
-
-        executeRequest(
-            endpoint = "/sync/check-ins/push",
-            method = "POST",
-            body = payload.toString(),
-            token = token
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            val syncedArray = data.getJSONArray("syncedUuids")
-            val syncedList = mutableListOf<String>()
-            for (i in 0 until syncedArray.length()) {
-                syncedList.add(syncedArray.getString(i))
-            }
-            SyncCheckInBatchResponseDto(
-                serverTimestamp = data.optString("serverTimestamp", Instant.now().toString()),
-                syncedUuids = syncedList
-            )
-        }
+        safeApiCall { apiService.pushCheckIns(formatBearer(token), request) }
     }
 
     suspend fun pullCheckIns(
         token: String,
         since: Instant
     ): Result<List<CheckInNetworkDto>> = withContext(Dispatchers.IO) {
-        val query = if (since != Instant.EPOCH) "?since=${since}" else ""
-        executeRequest(
-            endpoint = "/sync/check-ins/pull$query",
-            method = "GET",
-            body = null,
-            token = token
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            val itemsArray = data.getJSONArray("items")
-            val list = mutableListOf<CheckInNetworkDto>()
-            for (i in 0 until itemsArray.length()) {
-                val item = itemsArray.getJSONObject(i)
-                list.add(
-                    CheckInNetworkDto(
-                        uuid = item.getString("uuid"),
-                        checkInDate = item.getString("checkInDate"),
-                        mood = item.getInt("mood"),
-                        energy = item.getInt("energy"),
-                        sleepDurationMinutes = item.getInt("sleepDurationMinutes"),
-                        note = if (item.isNull("note")) null else item.optString("note"),
-                        isDeleted = item.optBoolean("isDeleted", false),
-                        createdAt = item.getString("createdAt"),
-                        updatedAt = item.getString("updatedAt")
-                    )
-                )
-            }
-            list
-        }
+        val queryParam = if (since != Instant.EPOCH) since.toString() else null
+        safeApiCall { apiService.pullCheckIns(formatBearer(token), queryParam) }
+            .map { it.items }
     }
 
     suspend fun pushBreathingPatterns(
         token: String,
         request: SyncBreathingBatchRequestDto
     ): Result<SyncBreathingBatchResponseDto> = withContext(Dispatchers.IO) {
-        val itemsArray = JSONArray()
-        for (item in request.items) {
-            val obj = JSONObject().apply {
-                put("uuid", item.uuid)
-                put("name", item.name)
-                put("inhaleDurationSeconds", item.inhaleDurationSeconds)
-                put("exhaleDurationSeconds", item.exhaleDurationSeconds)
-                put("isDeleted", item.isDeleted)
-                put("createdAt", item.createdAt)
-                put("updatedAt", item.updatedAt)
-            }
-            itemsArray.put(obj)
-        }
-
-        val payload = JSONObject().apply {
-            put("clientTimestamp", request.clientTimestamp)
-            put("items", itemsArray)
-        }
-
-        executeRequest(
-            endpoint = "/sync/breathing-patterns/push",
-            method = "POST",
-            body = payload.toString(),
-            token = token
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            val syncedArray = data.getJSONArray("syncedUuids")
-            val syncedList = mutableListOf<String>()
-            for (i in 0 until syncedArray.length()) {
-                syncedList.add(syncedArray.getString(i))
-            }
-            SyncBreathingBatchResponseDto(
-                serverTimestamp = data.optString("serverTimestamp", Instant.now().toString()),
-                syncedUuids = syncedList
-            )
-        }
+        safeApiCall { apiService.pushBreathingPatterns(formatBearer(token), request) }
     }
 
     suspend fun pullBreathingPatterns(
         token: String,
         since: Instant
     ): Result<List<BreathingPatternNetworkDto>> = withContext(Dispatchers.IO) {
-        val query = if (since != Instant.EPOCH) "?since=${since}" else ""
-        executeRequest(
-            endpoint = "/sync/breathing-patterns/pull$query",
-            method = "GET",
-            body = null,
-            token = token
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            val itemsArray = data.getJSONArray("items")
-            val list = mutableListOf<BreathingPatternNetworkDto>()
-            for (i in 0 until itemsArray.length()) {
-                val item = itemsArray.getJSONObject(i)
-                list.add(
-                    BreathingPatternNetworkDto(
-                        uuid = item.getString("uuid"),
-                        name = item.getString("name"),
-                        inhaleDurationSeconds = item.getInt("inhaleDurationSeconds"),
-                        exhaleDurationSeconds = item.getInt("exhaleDurationSeconds"),
-                        isDeleted = item.optBoolean("isDeleted", false),
-                        createdAt = item.getString("createdAt"),
-                        updatedAt = item.getString("updatedAt")
-                    )
-                )
-            }
-            list
-        }
+        val queryParam = if (since != Instant.EPOCH) since.toString() else null
+        safeApiCall { apiService.pullBreathingPatterns(formatBearer(token), queryParam) }
+            .map { it.items }
     }
 
     suspend fun pushScreenings(
         token: String,
         request: SyncScreeningBatchRequestDto
     ): Result<SyncScreeningBatchResponseDto> = withContext(Dispatchers.IO) {
-        val itemsArray = JSONArray()
-        for (item in request.items) {
-            val answersArray = JSONArray()
-            for (a in item.answers) {
-                answersArray.put(
-                    JSONObject().apply {
-                        put("questionNumber", a.questionNumber)
-                        put("answerValue", a.answerValue)
-                    }
-                )
-            }
-
-            val obj = JSONObject().apply {
-                put("uuid", item.uuid)
-                put("screeningType", item.screeningType)
-                put("periodStartDate", item.periodStartDate)
-                put("periodEndDate", item.periodEndDate)
-                put("instrumentVersion", item.instrumentVersion)
-                put("totalScore", item.totalScore)
-                put("category", item.category)
-                put("helpIndicator", item.helpIndicator)
-                put("completedAt", item.completedAt)
-                put("isDeleted", item.isDeleted)
-                put("createdAt", item.createdAt)
-                put("updatedAt", item.updatedAt)
-                put("answers", answersArray)
-            }
-            itemsArray.put(obj)
-        }
-
-        val payload = JSONObject().apply {
-            put("clientTimestamp", request.clientTimestamp)
-            put("items", itemsArray)
-        }
-
-        executeRequest(
-            endpoint = "/sync/screenings/push",
-            method = "POST",
-            body = payload.toString(),
-            token = token
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            val syncedArray = data.getJSONArray("syncedUuids")
-            val syncedList = mutableListOf<String>()
-            for (i in 0 until syncedArray.length()) {
-                syncedList.add(syncedArray.getString(i))
-            }
-            SyncScreeningBatchResponseDto(
-                serverTimestamp = data.optString("serverTimestamp", Instant.now().toString()),
-                syncedUuids = syncedList
-            )
-        }
+        safeApiCall { apiService.pushScreenings(formatBearer(token), request) }
     }
 
     suspend fun pullScreenings(
         token: String,
         since: Instant
     ): Result<List<ScreeningNetworkDto>> = withContext(Dispatchers.IO) {
-        val query = if (since != Instant.EPOCH) "?since=${since}" else ""
-        executeRequest(
-            endpoint = "/sync/screenings/pull$query",
-            method = "GET",
-            body = null,
-            token = token
-        ).mapCatching { json ->
-            val data = json.getJSONObject("data")
-            val itemsArray = data.getJSONArray("items")
-            val list = mutableListOf<ScreeningNetworkDto>()
-            for (i in 0 until itemsArray.length()) {
-                val item = itemsArray.getJSONObject(i)
-                val answersArray = item.getJSONArray("answers")
-                val answersList = mutableListOf<ScreeningAnswerNetworkDto>()
-                for (j in 0 until answersArray.length()) {
-                    val a = answersArray.getJSONObject(j)
-                    answersList.add(
-                        ScreeningAnswerNetworkDto(
-                            questionNumber = a.getInt("questionNumber"),
-                            answerValue = a.getInt("answerValue")
-                        )
-                    )
-                }
-
-                list.add(
-                    ScreeningNetworkDto(
-                        uuid = item.getString("uuid"),
-                        screeningType = item.getString("screeningType"),
-                        periodStartDate = item.getString("periodStartDate"),
-                        periodEndDate = item.getString("periodEndDate"),
-                        instrumentVersion = item.optString("instrumentVersion", "PHQ-9"),
-                        totalScore = item.getInt("totalScore"),
-                        category = item.getString("category"),
-                        helpIndicator = item.getBoolean("helpIndicator"),
-                        completedAt = item.getString("completedAt"),
-                        isDeleted = item.optBoolean("isDeleted", false),
-                        createdAt = item.getString("createdAt"),
-                        updatedAt = item.getString("updatedAt"),
-                        answers = answersList
-                    )
-                )
-            }
-            list
-        }
+        val queryParam = if (since != Instant.EPOCH) since.toString() else null
+        safeApiCall { apiService.pullScreenings(formatBearer(token), queryParam) }
+            .map { it.items }
     }
 
-    private fun executeRequest(
-        endpoint: String,
-        method: String,
-        body: String?,
-        token: String?
-    ): Result<JSONObject> {
-        var connection: HttpURLConnection? = null
+    private fun formatBearer(token: String): String {
+        return if (token.startsWith("Bearer ")) token else "Bearer $token"
+    }
+
+    private suspend fun <T> safeApiCall(
+        apiCall: suspend () -> Response<ApiResponse<T>>
+    ): Result<T> {
         return try {
-            val fullUrl = "$baseUrl$endpoint"
-            val url = URL(fullUrl)
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = method
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                setRequestProperty("Accept", "application/json")
-                if (!token.isNullOrBlank()) {
-                    setRequestProperty("Authorization", "Bearer $token")
+            val response = apiCall()
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null && body.success && body.data != null) {
+                    Result.success(body.data)
+                } else {
+                    val errMsg = body?.error?.message ?: body?.message ?: "Respons server tidak valid"
+                    Result.failure(Exception(errMsg))
                 }
-                doInput = true
-                if (body != null && (method == "POST" || method == "PUT" || method == "PATCH")) {
-                    doOutput = true
-                    OutputStreamWriter(outputStream, "UTF-8").use { writer ->
-                        writer.write(body)
-                        writer.flush()
-                    }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                val parsedError = errorBody?.let {
+                    runCatching {
+                        val gson = Gson()
+                        val apiErr = gson.fromJson(it, ApiResponse::class.java)
+                        apiErr.error?.message ?: apiErr.message
+                    }.getOrNull()
                 }
-            }
-
-            val responseCode = connection.responseCode
-            val inputStream = if (responseCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream ?: connection.inputStream
-            }
-
-            val responseText = BufferedReader(InputStreamReader(inputStream, "UTF-8")).use { it.readText() }
-            val json = JSONObject(responseText)
-
-            if (responseCode in 200..299 && json.optBoolean("success", true)) {
-                Result.success(json)
-            } else {
-                val errorObj = json.optJSONObject("error")
-                val errorMessage = errorObj?.optString("message")
-                    ?: json.optString("message", "Permintaan gagal dengan status $responseCode")
-                Result.failure(Exception(errorMessage))
+                val finalMessage = parsedError ?: "Permintaan gagal dengan kode HTTP ${response.code()}"
+                Result.failure(Exception(finalMessage))
             }
         } catch (e: Exception) {
             Result.failure(e)
-        } finally {
-            connection?.disconnect()
         }
     }
 
-    private fun parseAuthResponse(data: JSONObject): AuthResponseDto {
-        val token = data.getString("token")
-        val userObj = data.getJSONObject("user")
-        val user = AuthUserDto(
-            id = userObj.getString("id"),
-            email = userObj.getString("email"),
-            userName = if (userObj.isNull("userName")) null else userObj.optString("userName"),
-            createdAt = userObj.optString("createdAt", Instant.now().toString())
-        )
-        return AuthResponseDto(token = token, user = user)
-    }
-
     companion object {
-        const val DEFAULT_BASE_URL = "http://192.168.100.10:3000/api/v1"
-        private const val TIMEOUT_MS = 15000
+        const val DEFAULT_BASE_URL = "http://10.0.2.2:3000/api/v1/"
+
+        fun createRetrofitService(
+            baseUrl: String = DEFAULT_BASE_URL,
+            customOkHttpClient: OkHttpClient? = null
+        ): SelarasApiService {
+            val normalizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+            val okHttp = customOkHttpClient ?: OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .writeTimeout(15, TimeUnit.SECONDS)
+                .addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                })
+                .build()
+
+            val retrofit = Retrofit.Builder()
+                .baseUrl(normalizedBaseUrl)
+                .client(okHttp)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+
+            return retrofit.create(SelarasApiService::class.java)
+        }
     }
 }

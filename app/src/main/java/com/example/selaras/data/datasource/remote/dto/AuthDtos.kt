@@ -23,3 +23,21 @@ data class AuthResponseDto(
     val user: AuthUserDto
 )
 
+data class ApiResponse<T>(
+    val success: Boolean,
+    val data: T? = null,
+    val message: String? = null,
+    val error: ApiErrorDto? = null
+)
+
+data class ApiErrorDto(
+    val code: String? = null,
+    val message: String? = null,
+    val details: Any? = null
+)
+
+data class SyncPullResponseDto<T>(
+    val serverTimestamp: String? = null,
+    val items: List<T> = emptyList()
+)
+
