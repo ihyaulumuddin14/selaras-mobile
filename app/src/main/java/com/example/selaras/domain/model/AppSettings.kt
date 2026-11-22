@@ -10,6 +10,7 @@ data class AppSettings(
     val consentAcceptedAt: Instant? = null,
     val checkinReminderEnabled: Boolean = false,
     val checkinReminderTime: LocalTime? = null,
+    val userName: String? = null,
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 ) {

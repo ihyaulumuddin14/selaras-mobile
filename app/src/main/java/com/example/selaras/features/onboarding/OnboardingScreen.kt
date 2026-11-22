@@ -11,7 +11,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -25,15 +27,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.R
 
 internal object OnboardingColors {
     val Primary = Color(0xFF356859)
@@ -101,7 +111,6 @@ fun OnboardingScreen(
                         slides = viewModel.slides,
                         onNext = viewModel::nextSlide,
                         onPrev = viewModel::prevSlide,
-                        onSkip = viewModel::skipToConsent,
                         onDotClick = viewModel::setSlideIndex
                     )
                 }
@@ -114,6 +123,20 @@ fun OnboardingScreen(
                         onConsentChange = viewModel::setConsentChecked,
                         onSubmitConsent = { viewModel.submitConsentAndComplete() },
                         onBackToCarousel = viewModel::backToCarousel
+                    )
+                }
+                OnboardingDestination.CLOUD_BACKUP_PROMPT -> {
+                    BackHandler {
+                        viewModel.skipCloudBackup()
+                    }
+                    CloudBackupPromptContent(
+                        state = state,
+                        onModeChange = viewModel::setCloudBackupMode,
+                        onEmailChange = viewModel::setBackupEmail,
+                        onPasswordChange = viewModel::setBackupPassword,
+                        onUserNameChange = viewModel::setBackupUserName,
+                        onSubmit = { viewModel.submitCloudAuth() },
+                        onSkip = { viewModel.skipCloudBackup() }
                     )
                 }
                 OnboardingDestination.NAVIGATE_TO_DASHBOARD,
@@ -151,7 +174,7 @@ fun SplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // App Emblem / Leaf Logo representation
+            // App Logo
             Surface(
                 modifier = Modifier.size(96.dp),
                 shape = CircleShape,
@@ -159,7 +182,11 @@ fun SplashScreen(
                 border = BorderStroke(2.dp, OnboardingColors.Primary.copy(alpha = 0.2f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(text = "🌿", fontSize = 46.sp)
+                    Image(
+                        painter = painterResource(id = R.drawable.logo_selaras),
+                        contentDescription = "Logo Selaras",
+                        modifier = Modifier.size(64.dp)
+                    )
                 }
             }
 
@@ -171,14 +198,6 @@ fun SplashScreen(
                 fontWeight = FontWeight.Bold,
                 color = OnboardingColors.TextPrimary,
                 letterSpacing = 1.sp
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = "Kesejahteraan Emosional Mandiri",
-                fontSize = 15.sp,
-                color = OnboardingColors.TextSecondary
             )
 
             Spacer(Modifier.height(48.dp))
@@ -198,7 +217,6 @@ fun OnboardingCarouselContent(
     slides: List<OnboardingSlideData>,
     onNext: () -> Unit,
     onPrev: () -> Unit,
-    onSkip: () -> Unit,
     onDotClick: (Int) -> Unit
 ) {
     val currentSlide = slides.getOrNull(state.carouselIndex) ?: slides.first()
@@ -241,21 +259,17 @@ fun OnboardingCarouselContent(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Surface(
-                    modifier = Modifier.size(110.dp),
-                    shape = CircleShape,
-                    color = OnboardingColors.PrimaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = currentSlide.iconDescription,
-                            fontSize = 52.sp
-                        )
-                    }
-                }
+                Image(
+                    painter = painterResource(id = currentSlide.iconRes),
+                    contentDescription = currentSlide.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
             }
         }
 
@@ -531,5 +545,268 @@ private fun ConsentClauseCard(
                 lineHeight = 19.sp
             )
         }
+    }
+}
+
+@Composable
+private fun CloudBackupPromptContent(
+    state: OnboardingUiState,
+    onModeChange: (Boolean) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onUserNameChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+    var isPasswordVisible by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(OnboardingColors.Background)
+            .padding(horizontal = 24.dp)
+    ) {
+        Spacer(Modifier.height(16.dp))
+
+        // Header & Category Badge
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(OnboardingColors.PrimaryContainer)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = "Opsional • Pencadangan Awan",
+                color = OnboardingColors.Primary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            text = "Cadangkan Data Anda",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = OnboardingColors.TextPrimary,
+            lineHeight = 32.sp
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        Text(
+            text = "Selaras bersifat offline-first. Pendaftaran akun bersifat opsional untuk mencadangkan catatan check-in, pola napas, dan hasil skrining agar bisa dipulihkan saat berganti perangkat.",
+            fontSize = 13.sp,
+            color = OnboardingColors.TextSecondary,
+            lineHeight = 19.sp
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        // Mode Toggle Tab: Daftar Akun Baru vs Masuk
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(OnboardingColors.Surface)
+                .border(1.dp, OnboardingColors.CardBorder, RoundedCornerShape(12.dp))
+                .padding(4.dp)
+        ) {
+            Button(
+                onClick = { onModeChange(true) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (state.isCloudBackupMode) OnboardingColors.Primary else Color.Transparent,
+                    contentColor = if (state.isCloudBackupMode) Color.White else OnboardingColors.TextSecondary
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.weight(1f),
+                elevation = null
+            ) {
+                Text("Daftar Akun", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+
+            Button(
+                onClick = { onModeChange(false) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (!state.isCloudBackupMode) OnboardingColors.Primary else Color.Transparent,
+                    contentColor = if (!state.isCloudBackupMode) Color.White else OnboardingColors.TextSecondary
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.weight(1f),
+                elevation = null
+            ) {
+                Text("Sudah Punya Akun", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Form Fields (Scrollable)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(scrollState)
+        ) {
+            if (state.syncErrorMessage != null) {
+                Surface(
+                    color = OnboardingColors.Error.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, OnboardingColors.Error.copy(alpha = 0.3f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Text(
+                        text = state.syncErrorMessage,
+                        color = OnboardingColors.Error,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            if (state.isCloudBackupMode) {
+                OutlinedTextField(
+                    value = state.backupUserName,
+                    onValueChange = onUserNameChange,
+                    label = { Text("Nama Pengguna (Opsional)") },
+                    placeholder = { Text("Contoh: Ahmad") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = OnboardingColors.Primary,
+                        focusedLabelColor = OnboardingColors.Primary,
+                        cursorColor = OnboardingColors.Primary,
+                        focusedContainerColor = OnboardingColors.Surface,
+                        unfocusedContainerColor = OnboardingColors.Surface
+                    )
+                )
+
+                Spacer(Modifier.height(12.dp))
+            }
+
+            OutlinedTextField(
+                value = state.backupEmail,
+                onValueChange = onEmailChange,
+                label = { Text("Alamat Email") },
+                placeholder = { Text("nama@contoh.com") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = OnboardingColors.Primary,
+                    focusedLabelColor = OnboardingColors.Primary,
+                    cursorColor = OnboardingColors.Primary,
+                    focusedContainerColor = OnboardingColors.Surface,
+                    unfocusedContainerColor = OnboardingColors.Surface
+                )
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = state.backupPassword,
+                onValueChange = onPasswordChange,
+                label = { Text("Kata Sandi") },
+                placeholder = { Text("Minimal 8 karakter") },
+                singleLine = true,
+                visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                        Text(
+                            text = if (isPasswordVisible) "Sembunyikan" else "Lihat",
+                            fontSize = 11.sp,
+                            color = OnboardingColors.Primary
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = OnboardingColors.Primary,
+                    focusedLabelColor = OnboardingColors.Primary,
+                    cursorColor = OnboardingColors.Primary,
+                    focusedContainerColor = OnboardingColors.Surface,
+                    unfocusedContainerColor = OnboardingColors.Surface
+                )
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // Notice on Smart Merge & Privacy
+            Surface(
+                color = OnboardingColors.Surface,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, OnboardingColors.CardBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (state.isCloudBackupMode) {
+                        "Catatan lokal Anda akan dicadangkan secara aman."
+                    } else {
+                        "Memulihkan data dari cloud akan menggabungkan riwayat awan dengan catatan lokal perangkat ini."
+                    },
+                    fontSize = 12.sp,
+                    color = OnboardingColors.TextSecondary,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Action Buttons
+        Button(
+            onClick = onSubmit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            enabled = !state.isSyncing && state.backupEmail.isNotBlank() && state.backupPassword.isNotBlank(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = OnboardingColors.Primary,
+                disabledContainerColor = OnboardingColors.Outline.copy(alpha = 0.2f)
+            )
+        ) {
+            if (state.isSyncing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = if (state.isCloudBackupMode) "Daftar & Cadangkan" else "Masuk & Pulihkan Data",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // Skip Button
+        TextButton(
+            onClick = onSkip,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            enabled = !state.isSyncing
+        ) {
+            Text(
+                text = "Lewati untuk Sekarang",
+                color = OnboardingColors.TextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
     }
 }

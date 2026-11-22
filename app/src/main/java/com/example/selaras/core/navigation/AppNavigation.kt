@@ -16,15 +16,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.selaras.core.di.AppContainer
+import kotlinx.coroutines.launch
 import com.example.selaras.features.breathing.BreathingScreen
 import com.example.selaras.features.breathing.BreathingViewModel
 import com.example.selaras.features.checkin.CheckInScreen
@@ -38,6 +41,9 @@ import com.example.selaras.features.screening.ScreeningScreen
 import com.example.selaras.features.security.AppLockMasterScreen
 import com.example.selaras.features.security.AppLockViewModel
 import com.example.selaras.features.settings.SettingsScreen
+import com.example.selaras.features.screening.ScreeningViewModel
+import com.example.selaras.data.datasource.remote.dto.LoginRequestDto
+import com.example.selaras.data.datasource.remote.dto.RegisterRequestDto
 
 /**
  * Sub-destinations that push on top of the bottom navigation bar.
@@ -62,6 +68,7 @@ fun AppNavigation(
     dashboardViewModel: DashboardViewModel,
     checkInViewModel: CheckInViewModel,
     breathingViewModel: BreathingViewModel,
+    screeningViewModel: ScreeningViewModel,
     appLockViewModel: AppLockViewModel? = null,
     onResetToOnboarding: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -70,10 +77,15 @@ fun AppNavigation(
     var subDestination by remember { mutableStateOf(SubDestination.NONE) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val appSettings by container.appSettingsRepository.getSettingsFlow().collectAsState(initial = null)
 
     // System BackHandler: handles sub-destinations, tabs, and double-press to exit
     BackHandler(enabled = true) {
         if (subDestination != SubDestination.NONE) {
+            if (subDestination == SubDestination.COUNSELOR_SUMMARY) {
+                container.screeningHandoffStore.clear()
+            }
             subDestination = SubDestination.NONE
         } else if (currentTab != NavTab.HOME) {
             currentTab = NavTab.HOME
@@ -119,16 +131,23 @@ fun AppNavigation(
     ) { destination ->
         when (destination) {
             SubDestination.NONE -> {
+                val screeningUiState by screeningViewModel.uiState.collectAsState()
+                val isScreeningSecondStep = currentTab == NavTab.SCREENING &&
+                    screeningUiState.step != com.example.selaras.features.screening.ScreeningStep.SELECTION
+                val showBottomBar = !isScreeningSecondStep
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        BottomNavBar(
-                            selectedTab = currentTab,
-                            onTabSelected = { tab ->
-                                currentTab = tab
-                                subDestination = SubDestination.NONE
-                            }
-                        )
+                        if (showBottomBar) {
+                            BottomNavBar(
+                                selectedTab = currentTab,
+                                onTabSelected = { tab ->
+                                    currentTab = tab
+                                    subDestination = SubDestination.NONE
+                                }
+                            )
+                        }
                     }
                 ) { innerPadding ->
                     Box(
@@ -163,6 +182,7 @@ fun AppNavigation(
                                 NavTab.HOME -> {
                                     DashboardScreen(
                                         viewModel = dashboardViewModel,
+                                        isPinSet = container.securityRepository.isPinSet(),
                                         onNavigateToCheckIn = {
                                             checkInViewModel.navigateToNewCheckIn()
                                             currentTab = NavTab.CHECK_IN
@@ -177,7 +197,10 @@ fun AppNavigation(
                                         },
                                         onNavigateToBreathing = { subDestination = SubDestination.BREATHING },
                                         onNavigateToScreening = { currentTab = NavTab.SCREENING },
-                                        onNavigateToCounselorSummary = { subDestination = SubDestination.COUNSELOR_SUMMARY },
+                                        onNavigateToCounselorSummary = {
+                                            container.screeningHandoffStore.clear()
+                                            subDestination = SubDestination.COUNSELOR_SUMMARY
+                                        },
                                         onNavigateToSettings = { subDestination = SubDestination.SETTINGS },
                                         onNavigateToHelp = { currentTab = NavTab.HELP }
                                     )
@@ -192,14 +215,27 @@ fun AppNavigation(
 
                                 NavTab.SCREENING -> {
                                     ScreeningScreen(
-                                        onStartScreening = { /* Ready for PHQ-9 Question flow */ }
+                                        viewModel = screeningViewModel,
+                                        onOpenHelp = {
+                                            currentTab = NavTab.HELP
+                                        },
+                                        onOpenHistory = {
+                                            currentTab = NavTab.HISTORY
+                                        },
+                                        onOpenCounselorSummary = { resultId ->
+                                            container.screeningHandoffStore.selectResult(resultId)
+                                            subDestination = SubDestination.COUNSELOR_SUMMARY
+                                        }
                                     )
                                 }
 
                                 NavTab.HISTORY -> {
                                     HistoryScreen(
                                         onNavigateToCheckInHistory = { currentTab = NavTab.CHECK_IN },
-                                        onNavigateToCounselorPdf = { subDestination = SubDestination.COUNSELOR_SUMMARY }
+                                        onNavigateToCounselorPdf = {
+                                            container.screeningHandoffStore.clear()
+                                            subDestination = SubDestination.COUNSELOR_SUMMARY
+                                        }
                                     )
                                 }
 
@@ -241,7 +277,21 @@ fun AppNavigation(
                             .consumeWindowInsets(innerPadding)
                     ) {
                         CounselorSummaryScreen(
-                            onNavigateBack = { subDestination = SubDestination.NONE }
+                            onNavigateToHelp = {
+                                subDestination = SubDestination.NONE
+                                currentTab = NavTab.HELP
+                            },
+                            onNavigateToCheckIn = {
+                                subDestination = SubDestination.NONE
+                                currentTab = NavTab.CHECK_IN
+                            },
+                            onNavigateToSettings = {
+                                subDestination = SubDestination.SETTINGS
+                            },
+                            onNavigateBack = {
+                                container.screeningHandoffStore.clear()
+                                subDestination = SubDestination.NONE
+                            }
                         )
                     }
                 }
@@ -257,8 +307,17 @@ fun AppNavigation(
                             .padding(innerPadding)
                             .consumeWindowInsets(innerPadding)
                     ) {
+                        val authSession by container.authSessionManager.sessionState.collectAsState()
+
                         SettingsScreen(
                             isPinSet = container.securityRepository.isPinSet(),
+                            userName = appSettings?.userName,
+                            authSession = authSession,
+                            onUpdateUserName = { newName ->
+                                coroutineScope.launch {
+                                    container.appSettingsRepository.updateUserName(newName)
+                                }
+                            },
                             onNavigateBack = { subDestination = SubDestination.NONE },
                             onResetPin = {
                                 if (appLockViewModel != null) {
@@ -270,7 +329,64 @@ fun AppNavigation(
                                     subDestination = SubDestination.PIN_SETUP
                                 }
                             },
-                            onDeleteAllData = onResetToOnboarding
+                            onDeleteAllData = onResetToOnboarding,
+                            onRegister = { email, password, userName, onResult ->
+                                coroutineScope.launch {
+                                    val res = container.apiClient.register(
+                                        RegisterRequestDto(email, password, userName)
+                                    )
+                                    if (res.isSuccess) {
+                                        val resp = res.getOrThrow()
+                                        container.authSessionManager.saveSession(
+                                            token = resp.token,
+                                            email = resp.user.email,
+                                            userId = resp.user.id,
+                                            userName = resp.user.userName
+                                        )
+                                        // Backup awal ke server
+                                        container.syncCoordinator.backup()
+                                        onResult(Result.success(Unit))
+                                    } else {
+                                        onResult(Result.failure(res.exceptionOrNull() ?: Exception("Gagal mendaftar")))
+                                    }
+                                }
+                            },
+                            onLogin = { email, password, onResult ->
+                                coroutineScope.launch {
+                                    val res = container.apiClient.login(
+                                        LoginRequestDto(email, password)
+                                    )
+                                    if (res.isSuccess) {
+                                        val resp = res.getOrThrow()
+                                        container.authSessionManager.saveSession(
+                                            token = resp.token,
+                                            email = resp.user.email,
+                                            userId = resp.user.id,
+                                            userName = resp.user.userName
+                                        )
+                                        // Restore awal (Smart Merge LWW)
+                                        container.syncCoordinator.restore()
+                                        onResult(Result.success(Unit))
+                                    } else {
+                                        onResult(Result.failure(res.exceptionOrNull() ?: Exception("Email atau password salah")))
+                                    }
+                                }
+                            },
+                            onBackupNow = { onResult ->
+                                coroutineScope.launch {
+                                    val report = container.syncCoordinator.backup()
+                                    onResult(report)
+                                }
+                            },
+                            onRestoreNow = { onResult ->
+                                coroutineScope.launch {
+                                    val report = container.syncCoordinator.restore()
+                                    onResult(report)
+                                }
+                            },
+                            onLogout = {
+                                container.authSessionManager.clearSession()
+                            }
                         )
                     }
                 }

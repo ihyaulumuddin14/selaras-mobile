@@ -2,10 +2,18 @@
 
 package com.example.selaras.features.counselor
 
+import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -35,13 +44,19 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -53,9 +68,12 @@ import com.example.selaras.SelarasApplication
 import com.example.selaras.core.ui.components.SelarasIcons
 import com.example.selaras.domain.usecase.counselor.CreateCounselorSummaryUseCase
 import com.example.selaras.domain.usecase.counselor.GetCounselorEligibilityUseCase
+import kotlinx.coroutines.flow.flowOf
 import java.io.File
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-// Serasi Color Tokens
 private val CanvasBackground = Color(0xFFF7F7F2)
 private val PineGreen = Color(0xFF356859)
 private val LightSageGreen = Color(0xFFE0EDE4)
@@ -68,13 +86,12 @@ private val DisabledContainer = Color(0xFFE2E8E3)
 private val DisabledContent = Color(0xFF8E9E98)
 private val CardBorder = Color(0xFFE5ECE8)
 
-/**
- * Screen for Counselor Summary generation and local PDF export.
- * Designed with warm, user-friendly language without technical jargon.
- */
 @Composable
 fun CounselorSummaryScreen(
     onNavigateBack: () -> Unit = {},
+    onNavigateToHelp: () -> Unit = {},
+    onNavigateToCheckIn: () -> Unit = onNavigateBack,
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: CounselorSummaryViewModel? = null
 ) {
@@ -94,7 +111,8 @@ fun CounselorSummaryScreen(
                 screeningRepository = container.screeningRepository,
                 counselorRepository = container.counselorRepository,
                 createSummaryUseCase = createUseCase,
-                getEligibilityUseCase = eligibilityUseCase
+                getEligibilityUseCase = eligibilityUseCase,
+                appSettingsRepository = container.appSettingsRepository
             )
         } else {
             CounselorSummaryViewModel.createPreviewInstance()
@@ -102,6 +120,47 @@ fun CounselorSummaryScreen(
     }
 
     val uiState by effectiveViewModel.uiState.collectAsState()
+    val handoffStore = remember(context) {
+        (context.applicationContext as? SelarasApplication)?.container?.screeningHandoffStore
+    }
+    val handoffFlow = remember(handoffStore) {
+        handoffStore?.selectedResultId ?: flowOf<Long?>(null)
+    }
+    val handoffId by handoffFlow.collectAsState(initial = null)
+    LaunchedEffect(effectiveViewModel, handoffId) {
+        handoffId?.let(effectiveViewModel::acceptHandoffResultId)
+    }
+
+    var showSaveSuccessDialog by remember { mutableStateOf(false) }
+    var savedLocationMessage by remember { mutableStateOf("") }
+    var savedFileUri by remember { mutableStateOf<Uri?>(null) }
+
+    val defaultFileName = "Serasi · Ringkasan Mingguan.pdf"
+
+    val saveDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val file = uiState.generatedPdfFile
+            if (file != null && file.exists()) {
+                val copyResult = copyPdfToUri(context, file, uri)
+                if (copyResult.isSuccess) {
+                    savedFileUri = uri
+                    savedLocationMessage = "Penyimpanan Perangkat (${uri.lastPathSegment ?: "Folder Terpilih"})"
+                    showSaveSuccessDialog = true
+                    Toast.makeText(context, "Dokumen PDF berhasil disimpan ke penyimpanan lokal", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, "Gagal menyimpan berkas: ${copyResult.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Toast.makeText(context, "Berkas PDF tidak ditemukan", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        effectiveViewModel.loadRealData()
+    }
 
     val headerTitle = when (uiState.screenState) {
         CounselorScreenState.SELECT_CONTENT,
@@ -119,7 +178,7 @@ fun CounselorSummaryScreen(
             .fillMaxSize()
             .background(CanvasBackground)
     ) {
-        // App Header with Support Agent icon
+        // App Header with Support Agent icon (navigates to Help)
         CounselorHeader(
             title = headerTitle,
             onBack = {
@@ -134,12 +193,9 @@ fun CounselorSummaryScreen(
                     CounselorScreenState.PREPARING -> onNavigateBack()
                 }
             },
-            onSupportClick = {
-                Toast.makeText(context, "Layanan Bantuan: Silakan hubungi konselor atau psikolog profesional Anda.", Toast.LENGTH_SHORT).show()
-            }
+            onSupportClick = onNavigateToHelp
         )
 
-        // Main Scrollable Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -152,33 +208,26 @@ fun CounselorSummaryScreen(
                 CounselorScreenState.SELECT_CONTENT -> {
                     SelectContentScreen(
                         uiState = uiState,
-                        onToggleManual = { effectiveViewModel.toggleScreeningManual(it) },
-                        onToggleRoutine = { effectiveViewModel.toggleScreeningRoutine(it) },
+                        onToggleScreening = { id, checked -> effectiveViewModel.toggleScreeningItem(id, checked) },
                         onToggleIncludeNotes = { effectiveViewModel.toggleIncludeNotes(it) },
-                        onToggleNoteN09 = { effectiveViewModel.toggleNoteN09(it) },
-                        onToggleNoteN11 = { effectiveViewModel.toggleNoteN11(it) },
+                        onToggleNote = { date, checked -> effectiveViewModel.toggleNoteItem(date, checked) },
                         onCreateSummary = { effectiveViewModel.createSummary() },
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onNavigateToSettings = onNavigateToSettings,
+                        onSupportClick = onNavigateToHelp
                     )
                 }
                 CounselorScreenState.INELIGIBLE -> {
                     IneligibleScreen(
                         uiState = uiState,
-                        onIsiCheckIn = onNavigateBack,
+                        onIsiCheckIn = onNavigateToCheckIn,
                         onLihatRiwayat = onNavigateBack,
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onSupportClick = onNavigateToHelp
                     )
                 }
                 CounselorScreenState.PREPARING -> {
                     PreparingScreen(
                         uiState = uiState,
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onSupportClick = onNavigateToHelp
                     )
                 }
                 CounselorScreenState.PREVIEW -> {
@@ -186,26 +235,20 @@ fun CounselorSummaryScreen(
                         uiState = uiState,
                         onExportPdf = { effectiveViewModel.exportPdf(context) },
                         onUbahPilihan = { effectiveViewModel.backToSelectContent() },
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onSupportClick = onNavigateToHelp
                     )
                 }
                 CounselorScreenState.SOURCE_CHANGED -> {
                     SourceChangedScreen(
                         uiState = uiState,
                         onPerbaruiPratinjau = { effectiveViewModel.refreshPreview() },
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onSupportClick = onNavigateToHelp
                     )
                 }
                 CounselorScreenState.GENERATING_PDF -> {
                     GeneratingPdfScreen(
                         uiState = uiState,
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onSupportClick = onNavigateToHelp
                     )
                 }
                 CounselorScreenState.PDF_ERROR -> {
@@ -213,26 +256,147 @@ fun CounselorSummaryScreen(
                         uiState = uiState,
                         onRetryExport = { effectiveViewModel.retryExport(context) },
                         onBackToPreview = { effectiveViewModel.backToPreview() },
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onSupportClick = onNavigateToHelp
                     )
                 }
                 CounselorScreenState.EXPORT_SUCCESS -> {
                     ExportSuccessScreen(
                         uiState = uiState,
                         onSimpanPdf = {
-                            Toast.makeText(context, "Dokumen PDF berhasil disimpan di penyimpanan lokal aplikasi", Toast.LENGTH_SHORT).show()
+                            val file = uiState.generatedPdfFile
+                            if (file != null && file.exists()) {
+                                val saveResult = savePdfToPublicDownloads(context, file, defaultFileName)
+                                if (saveResult.isSuccess) {
+                                    savedFileUri = saveResult.getOrNull()
+                                    savedLocationMessage = "Folder Download (Penyimpanan Perangkat)"
+                                    showSaveSuccessDialog = true
+                                    Toast.makeText(context, "Dokumen PDF berhasil disimpan di folder Download", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    try {
+                                        saveDocumentLauncher.launch(defaultFileName)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Gagal menyimpan berkas: ${saveResult.exceptionOrNull()?.message ?: e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            } else {
+                                Toast.makeText(context, "Dokumen PDF sedang disiapkan, silakan tunggu...", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onBukaPdf = {
+                            openPdf(context, uiState.generatedPdfFile, savedFileUri)
                         },
                         onPilihCaraBerbagi = {
                             sharePdf(context, uiState.generatedPdfFile)
                         },
                         onKembaliKeRiwayat = onNavigateBack,
-                        onSupportClick = {
-                            Toast.makeText(context, "Layanan bantuan konseling siap dihubungi", Toast.LENGTH_SHORT).show()
-                        }
+                        onSupportClick = onNavigateToHelp
                     )
                 }
+            }
+
+            if (showSaveSuccessDialog) {
+                AlertDialog(
+                    onDismissRequest = { showSaveSuccessDialog = false },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(PineGreen),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Dokumen PDF Tersimpan",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DarkGreenText
+                            )
+                        }
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Berkas ringkasan mingguan konselor telah berhasil disimpan secara permanen di penyimpanan lokal ponselmu.",
+                                fontSize = 13.sp,
+                                color = DarkGreenText,
+                                lineHeight = 18.sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = LightSageGreen,
+                                border = BorderStroke(1.dp, CardBorder)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = "📁 Lokasi: $savedLocationMessage",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = DarkGreenText
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "📄 Nama Berkas: $defaultFileName",
+                                        fontSize = 12.sp,
+                                        color = MutedGreenText
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Kamu dapat membuka berkas langsung dengan aplikasi pembaca PDF, atau memilih folder penyimpanan lain jika ingin menyimpan di lokasi khusus.",
+                                fontSize = 11.sp,
+                                color = MutedGreenText,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showSaveSuccessDialog = false
+                                openPdf(context, uiState.generatedPdfFile, savedFileUri)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PineGreen)
+                        ) {
+                            Text("Buka Berkas PDF", color = Color.White, fontSize = 13.sp)
+                        }
+                    },
+                    dismissButton = {
+                        Row {
+                            OutlinedButton(
+                                onClick = {
+                                    showSaveSuccessDialog = false
+                                    try {
+                                        saveDocumentLauncher.launch(defaultFileName)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Tidak dapat membuka pemilih berkas: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                Text("Pilih Folder Lain...", color = PineGreen, fontSize = 13.sp)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            TextButton(onClick = { showSaveSuccessDialog = false }) {
+                                Text("Tutup", color = MutedGreenText, fontSize = 13.sp)
+                            }
+                        }
+                    },
+                    containerColor = CanvasBackground
+                )
             }
 
             Spacer(modifier = Modifier.height(36.dp))
@@ -241,32 +405,54 @@ fun CounselorSummaryScreen(
 }
 
 // -------------------------------------------------------------
-// Sub-screen 1: Select Content
+// Sub-screen 1: Select Content (Clean Checkbox + Info Dialog Pattern)
 // -------------------------------------------------------------
 @Composable
 private fun SelectContentScreen(
     uiState: CounselorSummaryUiState,
-    onToggleManual: (Boolean) -> Unit,
-    onToggleRoutine: (Boolean) -> Unit,
+    onToggleScreening: (Long, Boolean) -> Unit,
     onToggleIncludeNotes: (Boolean) -> Unit,
-    onToggleNoteN09: (Boolean) -> Unit,
-    onToggleNoteN11: (Boolean) -> Unit,
+    onToggleNote: (LocalDate, Boolean) -> Unit,
     onCreateSummary: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onSupportClick: () -> Unit
 ) {
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
+    var selectedScreeningForInfo by remember { mutableStateOf<CounselorScreeningUiItem?>(null) }
+    var selectedNoteForInfo by remember { mutableStateOf<CounselorNoteUiItem?>(null) }
+    var showNameRequiredDialog by remember { mutableStateOf(false) }
+
+    val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+    val periodText = "Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}"
+    PeriodBadgeChip(periodText)
     Spacer(modifier = Modifier.height(14.dp))
 
-    // Days Recorded Card
     WeeklyDaysRecordedCard(
         recordedDays = uiState.recordedDays,
         totalDays = uiState.totalDays,
-        recordedDaysText = "Tercatat: 7, 9, 11, dan 13 Oktober",
-        missingDaysText = "Belum tercatat: 8, 10, dan 12 Oktober",
+        recordedDaysText = "Tercatat: ${uiState.recordedDays} hari",
+        missingDaysText = "Belum tercatat: ${uiState.totalDays - uiState.recordedDays} hari",
         isEligible = true
     )
 
-    Spacer(modifier = Modifier.height(22.dp))
+    if (uiState.handoffResultId != null) {
+        Spacer(modifier = Modifier.height(14.dp))
+        CardItemContainer(containerColor = LavenderCard) {
+            Text(
+                text = "Hasil skrining #${uiState.handoffResultId} telah diterima dari F1.",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = DarkGreenText
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Hasil ini dipilih secara otomatis, tetapi dapat dilepas dari ringkasan.",
+                fontSize = 12.sp,
+                color = MutedGreenText
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
     Text(
         text = "Pilih data yang ingin kamu bawa",
         fontSize = 16.sp,
@@ -275,134 +461,240 @@ private fun SelectContentScreen(
     )
     Spacer(modifier = Modifier.height(12.dp))
 
-    // Check-in (wajib disertakan)
-    CardItemContainer(containerColor = LightSageGreen) {
-        Text(
-            text = "Catatan Check-in Harian · Utama",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = DarkGreenText
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Analisis suasana hati, durasi tidur, dan energi dari 4 hari tercatat akan menjadi dasar utama ringkasan mingguanmu.",
-            fontSize = 12.sp,
-            color = MutedGreenText,
-            lineHeight = 18.sp
-        )
+    // 1. Check-in Harian (Wajib / Utama)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(LightSageGreen)
+            .border(1.dp, CardBorder, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(0.5f)
+            ,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Wajib",
+                tint = PineGreen,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Catatan Check-in Harian",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkGreenText
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Analisis suasana hati, tidur, & energi (${uiState.recordedDays} dari ${uiState.totalDays} hari)",
+                    fontSize = 12.sp,
+                    color = MutedGreenText,
+                    lineHeight = 17.sp
+                )
+            }
+        }
     }
 
-    Spacer(modifier = Modifier.height(20.dp))
+    Spacer(modifier = Modifier.height(18.dp))
+
+    // 2. Hasil Skrining PHQ-9 (Opsional)
     Text(
-        text = "Hasil Skrining Berkala · Opsional",
-        fontSize = 15.sp,
+        text = "Hasil Skrining PHQ-9 · Opsional",
+        fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
         color = DarkGreenText
     )
-    Spacer(modifier = Modifier.height(4.dp))
-    Text(
-        text = "Pilih hasil skrining yang ingin kamu tunjukkan ke konselor. Kamu juga bisa membuat ringkasan tanpa hasil skrining.",
-        fontSize = 12.sp,
-        color = MutedGreenText,
-        lineHeight = 17.sp
-    )
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
-    // Skrining Option 1 (Mandiri)
-    CheckboxCard(
-        checked = uiState.selectScreeningManual,
-        onCheckedChange = onToggleManual,
-        title = "Skrining Mandiri · 9 Oktober 2026",
-        details = "Kuesioner Kesehatan PHQ-9\nSkor: 10 (Gejala Sedang)\nDiselesaikan pada sesi refleksi mandiri"
-    )
-    Spacer(modifier = Modifier.height(10.dp))
+    // Aturan seleksi skrining:
+    // - Maksimal 7 data terbaru sesuai current created_at
+    // - Jika tidak ada data skrining tampilkan tidak ada data
+    // - Jika <= 7 tampilkan semua
+    // - Jika > 7 tampilkan 7 terbarunya sesuai current created_at
+    val displayedScreenings = remember(uiState.availableScreenings) {
+        val sorted = uiState.availableScreenings.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
 
-    // Skrining Option 2 (Berkala)
-    CheckboxCard(
-        checked = uiState.selectScreeningRoutine,
-        onCheckedChange = onToggleRoutine,
-        title = "Skrining Berkala · 11 Oktober 2026",
-        details = "Kuesioner Kesehatan PHQ-9\nSkor: 8 (Gejala Ringan)\nDiselesaikan pada evaluasi dua mingguan"
-    )
-
-    Spacer(modifier = Modifier.height(20.dp))
-    Text(
-        text = "Catatan Pribadi · Opsional",
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Bold,
-        color = DarkGreenText
-    )
-    Spacer(modifier = Modifier.height(10.dp))
-
-    // Include notes master toggle
-    CheckboxCard(
-        checked = uiState.includePersonalNotes,
-        onCheckedChange = onToggleIncludeNotes,
-        title = "Sertakan Catatan Refleksi Pribadi",
-        details = "Secara bawaan dinonaktifkan untuk menjaga privasimu. Aktifkan jika ada catatan khusus yang ingin didiskusikan."
-    )
-
-    // Indented child notes
-    if (uiState.includePersonalNotes) {
-        Spacer(modifier = Modifier.height(10.dp))
-        Column(modifier = Modifier.padding(start = 16.dp)) {
-            CheckboxCard(
-                checked = uiState.selectNoteN09,
-                onCheckedChange = onToggleNoteN09,
-                title = "Catatan 9 Oktober 2026",
-                details = "\"Hari ini terasa berat. Saya ingin membicarakan cara meminta dukungan.\""
+    if (displayedScreenings.isEmpty()) {
+        CardItemContainer(containerColor = LavenderCard) {
+            Text(
+                text = "Tidak ada data",
+                fontSize = 12.sp,
+                color = MutedGreenText
+            )
+        }
+    } else {
+        displayedScreenings.forEach { screening ->
+            CleanSelectableItem(
+                checked = screening.isSelected,
+                onCheckedChange = { onToggleScreening(screening.id, it) },
+                title = screening.title,
+                onInfoClick = { selectedScreeningForInfo = screening }
             )
             Spacer(modifier = Modifier.height(8.dp))
-            CheckboxCard(
-                checked = uiState.selectNoteN11,
-                onCheckedChange = onToggleNoteN11,
-                title = "Catatan 11 Oktober 2026",
-                details = "\"Latihan pernapasan membantu saya lebih tenang di malam hari.\""
+        }
+    }
+
+    Spacer(modifier = Modifier.height(14.dp))
+
+    // 3. Catatan Pribadi (Opsional)
+    Text(
+        text = "Catatan Refleksi Pribadi · Opsional",
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold,
+        color = DarkGreenText
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // Aturan seleksi catatan pribadi:
+    // - Maksimal 7 data terbaru sesuai current created_at
+    // - Jika tidak ada data tampilkan tidak ada data
+    // - Jika <= 7 tampilkan semua
+    // - Jika > 7 tampilkan 7 terbarunya sesuai current created_at
+    val displayedNotes = remember(uiState.availableNotes) {
+        val sorted = uiState.availableNotes.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
+
+    val selectedNotesCount = displayedNotes.count { it.isSelected }
+
+    // Master Toggle Checkbox for Personal Notes
+    CleanSelectableItem(
+        checked = uiState.includePersonalNotes,
+        onCheckedChange = onToggleIncludeNotes,
+        title = "Sertakan Catatan Pribadi",
+        badgeText = if (uiState.includePersonalNotes) "Aktif — Pilih catatan di bawah" else "Nonaktif"
+    )
+
+    if (uiState.includePersonalNotes) {
+        if (displayedNotes.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Column(modifier = Modifier.padding(start = 16.dp)) {
+                displayedNotes.forEach { noteItem ->
+                    CleanSelectableItem(
+                        checked = noteItem.isSelected,
+                        onCheckedChange = { onToggleNote(noteItem.date, it) },
+                        title = noteItem.title,
+                        onInfoClick = { selectedNoteForInfo = noteItem }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        } else {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Tidak ada data",
+                fontSize = 12.sp,
+                color = MutedGreenText,
+                modifier = Modifier.padding(start = 16.dp)
             )
         }
     }
-    Spacer(modifier = Modifier.height(6.dp))
-    Text(
-        text = "Catatan tidak dianalisis otomatis. Hanya catatan yang kamu pilih yang akan dimasukkan ke dokumen.",
-        fontSize = 11.sp,
-        color = MutedGreenText
-    )
 
     Spacer(modifier = Modifier.height(20.dp))
-    // Lavender info banner
-    CardItemContainer(containerColor = LavenderCard) {
-        Text(
-            text = "Kamu Tetap Memegang Kendali Penuh",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = DarkGreenText
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Kamu bisa meninjau seluruh isi pratinjau sebelum menyimpannya ke PDF. Aplikasi tidak pernah mengirim data ke konselor secara otomatis.",
-            fontSize = 12.sp,
-            color = MutedGreenText,
-            lineHeight = 17.sp
-        )
-    }
-
-    Spacer(modifier = Modifier.height(22.dp))
-    PrimaryButton(text = "Buat Ringkasan Mingguan", onClick = onCreateSummary)
+    PrimaryButton(
+        text = "Buat Ringkasan Mingguan (PDF)",
+        onClick = {
+            if (uiState.userName.isNullOrBlank()) {
+                showNameRequiredDialog = true
+            } else {
+                onCreateSummary()
+            }
+        }
+    )
 
     Spacer(modifier = Modifier.height(12.dp))
     Text(
-        text = "Membuat ringkasan tidak memerlukan koneksi internet dan tidak mengurangi kuota skrining berkala.",
+        text = "*Membuat ringkasan tidak mengurangi kuota skrining berkala.",
         fontSize = 11.sp,
         color = MutedGreenText,
         lineHeight = 16.sp
     )
     Spacer(modifier = Modifier.height(16.dp))
     OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
+
+    // Popup Dialog Peringatan Nama Belum Diatur dengan Shortcut ke Settings
+    if (showNameRequiredDialog) {
+        AlertDialog(
+            onDismissRequest = { showNameRequiredDialog = false },
+            title = {
+                Text(
+                    text = "Nama Pengguna Belum Diatur",
+                    fontWeight = FontWeight.Bold,
+                    color = DarkGreenText
+                )
+            },
+            text = {
+                Text(
+                    text = "Nama diperlukan agar dokumen ringkasan untuk konselor dapat memuat identitasmu dengan jelas. Silakan atur nama terlebih dahulu di menu Pengaturan.",
+                    fontSize = 13.sp,
+                    color = MutedGreenText,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNameRequiredDialog = false
+                        onNavigateToSettings()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PineGreen,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text("Buka Pengaturan", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameRequiredDialog = false }) {
+                    Text("Nanti Saja", color = MutedGreenText)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Popup Info Skrining
+    if (selectedScreeningForInfo != null) {
+        val sc = selectedScreeningForInfo!!
+        SelarasInfoDialog(
+            title = sc.typeName,
+            subtitle = sc.dateString,
+            details = listOf(
+                "Instrumen" to "Kuesioner PHQ-9 (9 Pertanyaan)",
+                "Skor Total" to "${sc.score} / 27",
+                "Kategori" to sc.categoryText,
+                "Keterangan" to "Hasil penapisan mandiri ini bertujuan untuk mempermudah percakapan dengan konselor dan bukan vonis diagnosis medis."
+            ),
+            onDismiss = { selectedScreeningForInfo = null }
+        )
+    }
+
+    // Popup Info Catatan Pribadi
+    if (selectedNoteForInfo != null) {
+        val note = selectedNoteForInfo!!
+        SelarasInfoDialog(
+            title = "Catatan Refleksi Pribadi",
+            subtitle = note.date.format(periodFmt),
+            details = listOf(
+                "Isi Catatan" to "\"${note.noteText}\"",
+            ),
+            onDismiss = { selectedNoteForInfo = null }
+        )
+    }
 }
 
-// -------------------------------------------------------------
-// Sub-screen 2: Ineligible <4 Days
-// -------------------------------------------------------------
 @Composable
 private fun IneligibleScreen(
     uiState: CounselorSummaryUiState,
@@ -410,38 +702,41 @@ private fun IneligibleScreen(
     onLihatRiwayat: () -> Unit,
     onSupportClick: () -> Unit
 ) {
+    val daysNeeded = (4 - uiState.recordedDays).coerceAtLeast(1)
     WarningCardContainer(
         title = "Data Belum Mencukupi",
-        message = "Dibutuhkan minimal 4 hari catatan check-in dalam satu minggu agar ringkasan memiliki pola yang bermakna untuk konselor. Saat ini baru tercatat 3 hari."
+        message = "Dibutuhkan minimal 4 hari catatan check-in dalam satu minggu agar ringkasan memiliki pola yang bermakna untuk konselor. Saat ini baru tercatat ${uiState.recordedDays} hari."
     )
     Spacer(modifier = Modifier.height(14.dp))
 
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
+    val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+    PeriodBadgeChip("Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}")
     Spacer(modifier = Modifier.height(12.dp))
 
-    // Days Recorded Card (3/7)
+    // Days Recorded Card
     WeeklyDaysRecordedCard(
-        recordedDays = 3,
-        totalDays = 7,
-        recordedDaysText = "Tercatat: 7, 9, dan 11 Oktober",
-        missingDaysText = "Belum tercatat: 8, 10, 12, dan 13 Oktober",
+        recordedDays = uiState.recordedDays,
+        totalDays = uiState.totalDays,
+        recordedDaysText = "Tercatat: ${uiState.recordedDays} hari",
+        missingDaysText = "Belum tercatat: ${uiState.totalDays - uiState.recordedDays} hari",
         isEligible = false
     )
 
     Spacer(modifier = Modifier.height(20.dp))
-    DisabledCustomButton(text = "Buat Ringkasan Mingguan")
+    DisabledCustomButton(text = "Buat Ringkasan Mingguan (PDF)")
 
     Spacer(modifier = Modifier.height(10.dp))
     Text(
-        text = "Lengkapi 1 hari check-in lagi untuk membuka pratinjau dan ekspor dokumen PDF.",
+        text = "Lengkapi $daysNeeded hari check-in lagi untuk membuka pratinjau dan ekspor dokumen PDF.",
         fontSize = 11.sp,
-        color = MutedGreenText
+        color = MutedGreenText,
+        lineHeight = 17.sp
     )
 
-    Spacer(modifier = Modifier.height(16.dp))
-    PrimaryButton(text = "Isi Check-in Hari Ini", onClick = onIsiCheckIn)
-    Spacer(modifier = Modifier.height(10.dp))
-    OutlinedCustomButton(text = "Lihat Riwayat & Hasil Skrining", onClick = onLihatRiwayat)
+    if (!uiState.isTodayCheckedIn) {
+        Spacer(modifier = Modifier.height(16.dp))
+        PrimaryButton(text = "Isi Check-in Hari Ini", onClick = onIsiCheckIn)
+    }
 
     Spacer(modifier = Modifier.height(18.dp))
     CardItemContainer(containerColor = Color.White) {
@@ -453,29 +748,23 @@ private fun IneligibleScreen(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Hasil skrining PHQ-9 tetap tersimpan aman di riwayatmu, namun ringkasan berkala membutuhkan rekaman suasana hati harian yang konsisten.",
+            text = "Ringkasan konselor membutuhkan minimal 4 hari check-in. Hasil skrining PHQ-9 dapat disertakan secara opsional.",
             fontSize = 12.sp,
             color = MutedGreenText,
             lineHeight = 17.sp
         )
     }
-
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 3: Preparing
-// -------------------------------------------------------------
 @Composable
 private fun PreparingScreen(
     uiState: CounselorSummaryUiState,
     onSupportClick: () -> Unit
 ) {
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
+    val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+    PeriodBadgeChip("Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}")
     Spacer(modifier = Modifier.height(24.dp))
 
-    // Circular spinner
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(
             color = PineGreen,
@@ -520,14 +809,8 @@ private fun PreparingScreen(
 
     Spacer(modifier = Modifier.height(24.dp))
     DisabledCustomButton(text = "Sedang Memproses...")
-
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 4: Preview
-// -------------------------------------------------------------
 @Composable
 private fun PreviewScreen(
     uiState: CounselorSummaryUiState,
@@ -535,6 +818,8 @@ private fun PreviewScreen(
     onUbahPilihan: () -> Unit,
     onSupportClick: () -> Unit
 ) {
+    val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+
     // Lavender intro banner
     CardItemContainer(containerColor = LavenderCard) {
         Text(
@@ -553,10 +838,9 @@ private fun PreviewScreen(
     }
 
     Spacer(modifier = Modifier.height(12.dp))
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
+    PeriodBadgeChip("Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}")
     Spacer(modifier = Modifier.height(12.dp))
 
-    // Document Info Card
     DocumentInfoCard(uiState = uiState)
 
     Spacer(modifier = Modifier.height(20.dp))
@@ -568,7 +852,6 @@ private fun PreviewScreen(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    // Check-in Analysis Detail Card
     CardItemContainer(containerColor = Color.White) {
         Text(
             text = "${uiState.recordedDays} dari ${uiState.totalDays} Hari Tercatat",
@@ -577,26 +860,36 @@ private fun PreviewScreen(
             color = DarkGreenText
         )
         Spacer(modifier = Modifier.height(4.dp))
+        val recordedDatesStr = uiState.recordedDates.joinToString(", ") { it.format(DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("id"))) }
         Text(
-            text = "Tercatat pada tanggal: 7, 9, 11, dan 13 Oktober 2026",
+            text = "Tercatat pada tanggal: $recordedDatesStr",
             fontSize = 11.sp,
             color = MutedGreenText
         )
         Spacer(modifier = Modifier.height(14.dp))
 
-        MetricRow("Rata-rata Suasana Hati", "2,0 / 5")
-        MetricRow("Rata-rata Durasi Tidur", "6,0 jam")
-        MetricRow("Rata-rata Tingkat Energi", "2,5 / 5")
+        MetricRow("Rata-rata Suasana Hati", String.format(Locale.forLanguageTag("id"), "%.1f / 5", uiState.avgMood))
+        MetricRow("Rata-rata Durasi Tidur", String.format(Locale.forLanguageTag("id"), "%.1f jam", uiState.avgSleepHours))
+        MetricRow("Rata-rata Tingkat Energi", String.format(Locale.forLanguageTag("id"), "%.1f / 10", uiState.avgEnergy))
 
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Rata-rata dihitung dari 4 hari yang kamu isi. Tanggal tanpa pengisian tidak dianggap sebagai nilai nol.",
+            text = "Rata-rata dihitung dari ${uiState.recordedDays} hari yang kamu isi. Tanggal tanpa pengisian tidak dianggap sebagai nilai nol.",
             fontSize = 11.sp,
             color = MutedGreenText
         )
         Spacer(modifier = Modifier.height(12.dp))
+
+        val rincianHarianText = if (uiState.dailyItems.any { it.isRecorded }) {
+            uiState.dailyItems.filter { it.isRecorded }.joinToString("\n") { item ->
+                val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("id"))
+                "• ${item.date.format(fmt)}: Mood ${item.mood}/5 · ${String.format(Locale.forLanguageTag("id"), "%.1f", item.sleepHours)} jam · Energi ${item.energy}/10"
+            }
+        } else {
+            "• Belum ada catatan harian"
+        }
         Text(
-            text = "Rincian Harian (Mood / Tidur / Energi):\n• 7 Okt: 2/5 · 6 jam · 2/5\n• 9 Okt: 3/5 · 7 jam · 3/5\n• 11 Okt: 2/5 · 6 jam · 3/5\n• 13 Okt: 1/5 · 5 jam · 2/5",
+            text = "Rincian Harian (Mood / Tidur / Energi):\n$rincianHarianText",
             fontSize = 11.sp,
             color = MutedGreenText,
             lineHeight = 18.sp
@@ -631,11 +924,17 @@ private fun PreviewScreen(
     Text(
         text = "Hasil skrining ditampilkan terpisah dari data harian dan tidak digabung menjadi diagnosis medis.",
         fontSize = 11.sp,
-        color = MutedGreenText
+        color = MutedGreenText,
+        lineHeight = 17.sp
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    if (!uiState.selectScreeningManual && !uiState.selectScreeningRoutine && uiState.snapshotId != "S-02") {
+    val displayedScreenings = remember(uiState.availableScreenings) {
+        val sorted = uiState.availableScreenings.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
+    val selectedScreenings = displayedScreenings.filter { it.isSelected }
+    if (selectedScreenings.isEmpty()) {
         CardItemContainer(containerColor = Color.White) {
             Text(
                 text = "Tanpa Hasil Skrining",
@@ -651,16 +950,13 @@ private fun PreviewScreen(
             )
         }
     } else {
-        CardItemContainer(containerColor = Color.White) {
-            Text(text = "Skrining Mandiri · 9 Oktober 2026", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = DarkGreenText)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "Instrumen: Kuesioner PHQ-9 (9 Pertanyaan)\nSkor Total: 10\nKategori: Gejala Depresi Tingkat Sedang\nDiselesaikan pada sesi refleksi mandiri", fontSize = 11.sp, color = MutedGreenText, lineHeight = 17.sp)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        CardItemContainer(containerColor = Color.White) {
-            Text(text = "Skrining Berkala · 11 Oktober 2026", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = DarkGreenText)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "Instrumen: Kuesioner PHQ-9 (9 Pertanyaan)\nSkor Total: 8\nKategori: Gejala Depresi Tingkat Ringan\nDiselesaikan pada evaluasi berkala", fontSize = 11.sp, color = MutedGreenText, lineHeight = 17.sp)
+        selectedScreenings.forEach { sc ->
+            CardItemContainer(containerColor = Color.White) {
+                Text(text = sc.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = DarkGreenText)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = sc.details, fontSize = 11.sp, color = MutedGreenText, lineHeight = 17.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 
@@ -673,7 +969,12 @@ private fun PreviewScreen(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    if (!uiState.includePersonalNotes && uiState.snapshotId != "S-02") {
+    val displayedNotes = remember(uiState.availableNotes) {
+        val sorted = uiState.availableNotes.sortedByDescending { it.createdAt }
+        if (sorted.size > 7) sorted.take(7) else sorted
+    }
+    val selectedNotes = displayedNotes.filter { it.isSelected }
+    if (!uiState.includePersonalNotes || selectedNotes.isEmpty()) {
         CardItemContainer(containerColor = Color.White) {
             Text(
                 text = "Catatan Tidak Disertakan",
@@ -689,12 +990,15 @@ private fun PreviewScreen(
             )
         }
     } else {
-        CardItemContainer(containerColor = Color.White) {
-            Text(text = "Catatan Refleksi · 9 Oktober 2026", fontSize = 11.sp, color = MutedGreenText)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "\"Hari ini terasa berat. Saya ingin membicarakan cara meminta dukungan.\"", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = DarkGreenText)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "Hanya catatan yang kamu setujui yang akan muncul di dokumen.", fontSize = 11.sp, color = MutedGreenText)
+        selectedNotes.forEach { note ->
+            CardItemContainer(containerColor = Color.White) {
+                Text(text = note.title, fontSize = 11.sp, color = MutedGreenText)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = "\"${note.noteText}\"", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = DarkGreenText)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = "Hanya catatan yang kamu setujui yang akan muncul di dokumen.", fontSize = 11.sp, color = MutedGreenText)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 
@@ -717,7 +1021,7 @@ private fun PreviewScreen(
 
     Spacer(modifier = Modifier.height(16.dp))
     Text(
-        text = "Periksa seluruh isi dokumen sebelum mengekspor. Berkas PDF baru akan dibuat saat kamu menekan tombol di bawah.",
+        text = "Periksa seluruh isi dokumen sebelum mengekspor.",
         fontSize = 11.sp,
         color = MutedGreenText,
         lineHeight = 16.sp
@@ -727,14 +1031,8 @@ private fun PreviewScreen(
     PrimaryButton(text = "Ekspor ke File PDF", onClick = onExportPdf)
     Spacer(modifier = Modifier.height(10.dp))
     OutlinedCustomButton(text = "Ubah Pilihan Data", onClick = onUbahPilihan)
-
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 5: Source Changed
-// -------------------------------------------------------------
 @Composable
 private fun SourceChangedScreen(
     uiState: CounselorSummaryUiState,
@@ -748,56 +1046,46 @@ private fun SourceChangedScreen(
     Spacer(modifier = Modifier.height(14.dp))
 
     PrimaryButton(text = "Perbarui Pratinjau", onClick = onPerbaruiPratinjau)
-    Spacer(modifier = Modifier.height(10.dp))
-    DisabledCustomButton(text = "Ekspor ke File PDF")
-
-    Spacer(modifier = Modifier.height(16.dp))
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
-    Spacer(modifier = Modifier.height(12.dp))
-    DocumentInfoCard(uiState = uiState)
-
-    Spacer(modifier = Modifier.height(16.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 6: Generating PDF
-// -------------------------------------------------------------
 @Composable
 private fun GeneratingPdfScreen(
     uiState: CounselorSummaryUiState,
     onSupportClick: () -> Unit
 ) {
+    val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+    PeriodBadgeChip("Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}")
+    Spacer(modifier = Modifier.height(24.dp))
+
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(
+            color = PineGreen,
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(48.dp)
+        )
+    }
+    Spacer(modifier = Modifier.height(24.dp))
+
     CardItemContainer(containerColor = LightSageGreen) {
         Text(
-            text = "Sedang Membuat Berkas PDF...",
+            text = "Sedang menyiapkan dokumen PDF...",
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = DarkGreenText
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Dokumen PDF sedang disusun berdasarkan data pratinjau yang telah kamu setujui.",
+            text = "Berkas PDF disusun secara lokal di perangkatmu dan tidak dikirim ke server mana pun.",
             fontSize = 12.sp,
-            color = MutedGreenText
+            color = MutedGreenText,
+            lineHeight = 17.sp
         )
     }
 
-    Spacer(modifier = Modifier.height(14.dp))
-    DisabledCustomButton(text = "Memproses Dokumen...")
-
-    Spacer(modifier = Modifier.height(16.dp))
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
-    Spacer(modifier = Modifier.height(12.dp))
-    DocumentInfoCard(uiState = uiState)
-
-    Spacer(modifier = Modifier.height(18.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
+    Spacer(modifier = Modifier.height(24.dp))
+    DisabledCustomButton(text = "Menyimpan Dokumen...")
 }
 
-// -------------------------------------------------------------
-// Sub-screen 7: PDF Error
-// -------------------------------------------------------------
 @Composable
 private fun PdfErrorScreen(
     uiState: CounselorSummaryUiState,
@@ -807,111 +1095,66 @@ private fun PdfErrorScreen(
 ) {
     WarningCardContainer(
         title = "Gagal Menyiapkan PDF",
-        message = "Terjadi kendala saat membuat dokumen PDF di penyimpanan perangkat. Data pratinjaumu tetap aman, silakan coba kembali."
+        message = uiState.errorMessage ?: "Terjadi kendala saat menulis berkas PDF ke penyimpanan lokal. Silakan coba kembali."
     )
-    Spacer(modifier = Modifier.height(14.dp))
+    Spacer(modifier = Modifier.height(16.dp))
 
-    PrimaryButton(text = "Coba Buat PDF Lagi", onClick = onRetryExport)
+    PrimaryButton(text = "Coba Lagi", onClick = onRetryExport)
     Spacer(modifier = Modifier.height(10.dp))
     OutlinedCustomButton(text = "Kembali ke Pratinjau", onClick = onBackToPreview)
-
-    Spacer(modifier = Modifier.height(16.dp))
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
-    Spacer(modifier = Modifier.height(12.dp))
-    DocumentInfoCard(uiState = uiState)
-
-    Spacer(modifier = Modifier.height(18.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
-// -------------------------------------------------------------
-// Sub-screen 8: Export Success
-// -------------------------------------------------------------
 @Composable
 private fun ExportSuccessScreen(
     uiState: CounselorSummaryUiState,
     onSimpanPdf: () -> Unit,
+    onBukaPdf: () -> Unit,
     onPilihCaraBerbagi: () -> Unit,
     onKembaliKeRiwayat: () -> Unit,
     onSupportClick: () -> Unit
 ) {
-    // Large Checkmark in Soft Circle
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(LightSageGreen),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = "Success",
-                tint = PineGreen,
-                modifier = Modifier.size(36.dp)
-            )
+    CardItemContainer(containerColor = LightSageGreen) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(PineGreen),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "Dokumen Ringkasan Siap",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkGreenText
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tersimpan aman di penyimpanan lokal ponselmu",
+                    fontSize = 12.sp,
+                    color = MutedGreenText
+                )
+            }
         }
     }
 
-    CardItemContainer(containerColor = LightSageGreen) {
-        Text(
-            text = "Dokumen PDF Siap Disimpan",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = DarkGreenText
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Dokumen belum dikirim ke siapa pun. Kamu memiliki kendali penuh untuk menentukan kapan dan kepada siapa berkas ini dibagikan.",
-            fontSize = 12.sp,
-            color = MutedGreenText,
-            lineHeight = 17.sp
-        )
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-    CardItemContainer(containerColor = Color.White) {
-        Text(
-            text = "Serasi · Ringkasan Mingguan.pdf",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = DarkGreenText
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Berkas tersimpan di folder lokal perangkat. Format dokumen sudah rapi dan siap dicetak atau dikirim ke konselor.",
-            fontSize = 12.sp,
-            color = MutedGreenText
-        )
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-    PeriodBadgeChip("Periode Observasi: 7–13 Oktober 2026")
-
-    Spacer(modifier = Modifier.height(12.dp))
-    CardItemContainer(containerColor = Color.White) {
-        Text(
-            text = "Ringkasan Isi Dokumen",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = DarkGreenText
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = "• 4 hari check-in suasana hati & tidur\n• Rata-rata mood 2,0/5 · tidur 6 jam · energi 2,5/5\n• Rekapitulasi skrining & catatan pilihan\n• Pernyataan mandiri non-diagnosis klinis",
-            fontSize = 12.sp,
-            color = MutedGreenText,
-            lineHeight = 20.sp
-        )
-    }
+    Spacer(modifier = Modifier.height(14.dp))
+    val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+    PeriodBadgeChip("Periode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}")
 
     Spacer(modifier = Modifier.height(20.dp))
-    PrimaryButton(text = "Simpan Dokumen ke Perangkat", onClick = onSimpanPdf)
+    PrimaryButton(text = "Simpan ke File", onClick = onSimpanPdf)
+    Spacer(modifier = Modifier.height(10.dp))
+    OutlinedCustomButton(text = "Buka Berkas PDF", onClick = onBukaPdf)
     Spacer(modifier = Modifier.height(10.dp))
     OutlinedCustomButton(text = "Bagikan Berkas (Kirim ke Konselor)", onClick = onPilihCaraBerbagi)
 
@@ -925,13 +1168,8 @@ private fun ExportSuccessScreen(
 
     Spacer(modifier = Modifier.height(14.dp))
     OutlinedCustomButton(text = "Kembali ke Beranda", onClick = onKembaliKeRiwayat)
-    Spacer(modifier = Modifier.height(12.dp))
-    OutlinedCustomButton(text = "Bantuan & Kontak Konselor", onClick = onSupportClick)
 }
 
-// -------------------------------------------------------------
-// Reusable UI Components
-// -------------------------------------------------------------
 @Composable
 private fun CounselorHeader(
     title: String,
@@ -993,7 +1231,8 @@ private fun PeriodBadgeChip(text: String) {
             text = text,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = DarkGreenText
+            color = DarkGreenText,
+            lineHeight = 17.sp
         )
     }
 }
@@ -1021,34 +1260,32 @@ private fun WeeklyDaysRecordedCard(
                 "Dibutuhkan minimal 4 hari check-in yang berbeda untuk membentuk pola mingguan."
             },
             fontSize = 12.sp,
-            color = MutedGreenText
+            color = MutedGreenText,
+            lineHeight = 17.sp
         )
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Row of 7 dots
+        // Row of 7 indicators
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val days = listOf(7, 8, 9, 10, 11, 12, 13)
-            val isChecked = if (isEligible) {
-                listOf(true, false, true, false, true, false, true)
-            } else {
-                listOf(true, false, true, false, true, false, false)
-            }
+            val days = listOf(1, 2, 3, 4, 5, 6, 7)
+            val activeCheckIndex = recordedDays
 
             for (i in days.indices) {
+                val isChecked = i < activeCheckIndex
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
                         modifier = Modifier
                             .size(26.dp)
                             .clip(CircleShape)
-                            .background(if (isChecked[i]) PineGreen else Color.White)
-                            .border(1.dp, if (isChecked[i]) PineGreen else Color(0xFFC7D3CD), CircleShape),
+                            .background(if (isChecked) PineGreen else Color.White)
+                            .border(1.dp, if (isChecked) PineGreen else Color(0xFFC7D3CD), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isChecked[i]) {
+                        if (isChecked) {
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
@@ -1058,20 +1295,147 @@ private fun WeeklyDaysRecordedCard(
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = days[i].toString(), fontSize = 11.sp, color = DarkGreenText)
+                    Text(text = "H-${days[i]}", fontSize = 10.sp, color = DarkGreenText)
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(text = recordedDaysText, fontSize = 11.sp, color = MutedGreenText)
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = missingDaysText, fontSize = 11.sp, color = MutedGreenText)
     }
+}
+
+/**
+ * Clean selectable card focused on checkbox and clear title with an optional Info "i" icon button.
+ */
+@Composable
+private fun CleanSelectableItem(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    title: String,
+    badgeText: String? = null,
+    onInfoClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White)
+            .border(1.dp, CardBorder, RoundedCornerShape(12.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = CheckboxDefaults.colors(checkedColor = PineGreen)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = DarkGreenText
+                )
+                if (badgeText != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = badgeText,
+                        fontSize = 11.sp,
+                        color = MutedGreenText
+                    )
+                }
+            }
+            if (onInfoClick != null) {
+                IconButton(
+                    onClick = onInfoClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = SelarasIcons.Info,
+                        contentDescription = "Informasi detail",
+                        tint = PineGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Clean Popup Information Dialog for screening details and personal notes.
+ */
+@Composable
+private fun SelarasInfoDialog(
+    title: String,
+    subtitle: String? = null,
+    details: List<Pair<String, String>>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(20.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PineGreen,
+                    contentColor = Color.White
+                )
+            ) {
+                Text(text = "Tutup", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        title = {
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DarkGreenText
+                )
+                if (subtitle != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        fontSize = 12.sp,
+                        color = MutedGreenText
+                    )
+                }
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                details.forEach { (label, value) ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = label,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PineGreen
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = value,
+                        fontSize = 13.sp,
+                        color = DarkGreenText,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable
 private fun DocumentInfoCard(uiState: CounselorSummaryUiState) {
+    val periodFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
     CardItemContainer(containerColor = LightSageGreen) {
         Text(
             text = "Informasi Dokumen",
@@ -1080,19 +1444,16 @@ private fun DocumentInfoCard(uiState: CounselorSummaryUiState) {
             color = DarkGreenText
         )
         Spacer(modifier = Modifier.height(4.dp))
-        val screeningsOption = if (uiState.selectScreeningManual && uiState.selectScreeningRoutine) {
-            "Skrining Mandiri & Berkala disertakan"
-        } else if (uiState.selectScreeningManual) {
-            "Skrining Mandiri disertakan"
-        } else if (uiState.selectScreeningRoutine) {
-            "Skrining Berkala disertakan"
-        } else {
-            "Tidak menyertakan hasil skrining"
-        }
-        val noteOption = if (uiState.includePersonalNotes) "Catatan refleksi disertakan" else "Catatan pribadi tidak disertakan"
+        val displayedScreenings = uiState.availableScreenings.sortedByDescending { it.createdAt }.let { if (it.size > 7) it.take(7) else it }
+        val displayedNotes = uiState.availableNotes.sortedByDescending { it.createdAt }.let { if (it.size > 7) it.take(7) else it }
+        val scCount = displayedScreenings.count { it.isSelected }
+        val screeningsOption = if (scCount > 0) "$scCount hasil skrining disertakan" else "Tidak menyertakan hasil skrining"
+        val notesCount = displayedNotes.count { it.isSelected }
+        val noteOption = if (uiState.includePersonalNotes && notesCount > 0) "$notesCount catatan refleksi disertakan" else "Catatan pribadi tidak disertakan"
 
+        val userNameLine = if (!uiState.userName.isNullOrBlank()) "Nama Klien: ${uiState.userName}\n" else "Nama Klien: Belum diatur\n"
         Text(
-            text = "Waktu Pembuatan: 13 Oktober 2026 · 14.30 WIB\nPeriode Observasi: 7–13 Oktober 2026\nData Check-in: 4 hari valid (7, 9, 11, 13 Oktober)\nLampiran Skrining: $screeningsOption\nLampiran Catatan: $noteOption\nIsi dokumen PDF sama persis dengan pratinjau ini.",
+            text = "${userNameLine}Waktu Pembuatan: ${uiState.createdTimeString.ifEmpty { "Terkini" }}\nPeriode Observasi: ${uiState.periodStartDate.format(periodFmt)} – ${uiState.periodEndDate.format(periodFmt)}\nData Check-in: ${uiState.recordedDays} hari valid\nLampiran Skrining: $screeningsOption\nLampiran Catatan: $noteOption\nIsi dokumen PDF sama persis dengan pratinjau ini.",
             fontSize = 11.sp,
             color = MutedGreenText,
             lineHeight = 17.sp
@@ -1132,38 +1493,6 @@ private fun CardItemContainer(
             .padding(16.dp)
     ) {
         Column { content() }
-    }
-}
-
-@Composable
-private fun CheckboxCard(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    title: String,
-    details: String
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.White)
-            .border(1.dp, CardBorder, RoundedCornerShape(12.dp))
-            .clickable { onCheckedChange(!checked) }
-            .padding(12.dp)
-    ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Checkbox(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = CheckboxDefaults.colors(checkedColor = PineGreen)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = DarkGreenText)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(text = details, fontSize = 11.sp, color = MutedGreenText, lineHeight = 16.sp)
-            }
-        }
     }
 }
 
@@ -1254,4 +1583,87 @@ private fun sharePdf(context: Context, file: File?) {
     } catch (e: Exception) {
         Toast.makeText(context, "Tidak dapat membagikan dokumen: ${e.message}", Toast.LENGTH_SHORT).show()
     }
+}
+
+private fun openPdf(context: Context, file: File?, uri: Uri? = null) {
+    val targetUri: Uri? = uri ?: if (file != null && file.exists()) {
+        try {
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+        } catch (e: Exception) {
+            null
+        }
+    } else null
+
+    if (targetUri == null) {
+        Toast.makeText(context, "Dokumen PDF belum tersedia untuk dibuka", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(targetUri, "application/pdf")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(viewIntent, "Buka Ringkasan Konselor"))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, "Tidak ditemukan aplikasi pembaca PDF di perangkat ini", Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "Gagal membuka dokumen: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun savePdfToPublicDownloads(
+    context: Context,
+    sourceFile: File,
+    targetFileName: String
+): Result<Uri> = runCatching {
+    if (!sourceFile.exists()) {
+        throw IllegalStateException("Dokumen PDF sumber tidak ditemukan.")
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val resolver = context.contentResolver
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, targetFileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            ?: throw IllegalStateException("Gagal membuat entri berkas di folder Download.")
+
+        resolver.openOutputStream(uri)?.use { outputStream ->
+            sourceFile.inputStream().use { inputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        } ?: throw IllegalStateException("Gagal menulis data ke berkas Download.")
+        uri
+    } else {
+        @Suppress("DEPRECATION")
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!downloadsDir.exists()) {
+            downloadsDir.mkdirs()
+        }
+        val destFile = File(downloadsDir, targetFileName)
+        sourceFile.copyTo(destFile, overwrite = true)
+        Uri.fromFile(destFile)
+    }
+}
+
+private fun copyPdfToUri(
+    context: Context,
+    sourceFile: File,
+    destinationUri: Uri
+): Result<Unit> = runCatching {
+    if (!sourceFile.exists()) {
+        throw IllegalStateException("Dokumen PDF sumber tidak ditemukan.")
+    }
+    context.contentResolver.openOutputStream(destinationUri)?.use { outputStream ->
+        sourceFile.inputStream().use { inputStream ->
+            inputStream.copyTo(outputStream)
+        }
+    } ?: throw IllegalStateException("Gagal membuka aliran penyimpanan tujuan.")
 }

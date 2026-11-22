@@ -1,8 +1,15 @@
 package com.example.selaras.features.onboarding
 
+import androidx.annotation.DrawableRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.selaras.R
+import com.example.selaras.core.security.AuthSessionManager
+import com.example.selaras.data.datasource.remote.SelarasApiClient
+import com.example.selaras.data.datasource.remote.dto.LoginRequestDto
+import com.example.selaras.data.datasource.remote.dto.RegisterRequestDto
+import com.example.selaras.data.sync.SyncCoordinator
 import com.example.selaras.domain.repository.AppSettingsRepository
 import com.example.selaras.domain.usecase.onboarding.AcceptConsentUseCase
 import com.example.selaras.domain.usecase.onboarding.CompleteOnboardingUseCase
@@ -19,6 +26,7 @@ enum class OnboardingDestination {
     SPLASH,
     ONBOARDING_CAROUSEL,
     INFORMED_CONSENT,
+    CLOUD_BACKUP_PROMPT,
     NAVIGATE_TO_DASHBOARD,
     NAVIGATE_TO_APP_LOCK
 }
@@ -27,7 +35,14 @@ data class OnboardingSlideData(
     val title: String,
     val subtitle: String,
     val categoryBadge: String,
-    val iconDescription: String
+    val iconDescription: String,
+    @get:DrawableRes val iconRes: Int = when {
+        iconDescription.contains("welcome") -> R.drawable.welcome_slide_icon
+        iconDescription.contains("book") -> R.drawable.book_slide_icon
+        iconDescription.contains("calm") -> R.drawable.calm_slide_icon
+        iconDescription.contains("notes") -> R.drawable.notes_slide_icon
+        else -> R.drawable.logo_selaras
+    }
 )
 
 data class OnboardingUiState(
@@ -37,7 +52,14 @@ data class OnboardingUiState(
     val isConsentAccepted: Boolean = false,
     val isOnboardingCompleted: Boolean = false,
     val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    // Cloud Backup Prompt State
+    val isCloudBackupMode: Boolean = true, // true = Register, false = Login
+    val backupEmail: String = "",
+    val backupPassword: String = "",
+    val backupUserName: String = "",
+    val isSyncing: Boolean = false,
+    val syncErrorMessage: String? = null
 ) {
     val totalSlides: Int = 4
     val isLastSlide: Boolean
@@ -49,7 +71,10 @@ class OnboardingViewModel(
     private val getAppSettingsUseCase: GetAppSettingsUseCase,
     private val acceptConsentUseCase: AcceptConsentUseCase,
     private val completeOnboardingUseCase: CompleteOnboardingUseCase,
-    private val isPinSetProvider: () -> Boolean = { false }
+    private val isPinSetProvider: () -> Boolean = { false },
+    private val authSessionManager: AuthSessionManager? = null,
+    private val syncCoordinator: SyncCoordinator? = null,
+    private val apiClient: SelarasApiClient? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
@@ -60,25 +85,29 @@ class OnboardingViewModel(
             categoryBadge = "Selamat Datang di SELARAS",
             title = "Pelan-pelan kenali dirimu",
             subtitle = "Teman untuk memahami perasaan, menemukan jeda, dan merawat diri setiap hari.",
-            iconDescription = "🌱"
+            iconDescription = "welcome_slide_icon.png",
+            iconRes = R.drawable.welcome_slide_icon
         ),
         OnboardingSlideData(
             categoryBadge = "Kenali Harimu",
             title = "Apa kabarmu hari ini?",
             subtitle = "Catat suasana hati, energi, dan durasi tidur. Temukan pola dari check-in harianmu.",
-            iconDescription = "☀️"
+            iconDescription = "book_slide_icon.png",
+            iconRes = R.drawable.book_slide_icon
         ),
         OnboardingSlideData(
             categoryBadge = "Ruang Bernapas",
             title = "Tarik napas Beri ruang.",
             subtitle = "Ikuti latihan pernapasan sederhana untuk membantu tubuh dan pikiran lebih rileks.",
-            iconDescription = "💨"
+            iconDescription = "calm_slide_icon.png",
+            iconRes = R.drawable.calm_slide_icon
         ),
         OnboardingSlideData(
             categoryBadge = "Pahami Dirimu",
             title = "Pahami pola mulai bercerita.",
             subtitle = "Kenali diri lewat skrining dan ringkasan pribadi. Pilih yang ingin kamu bawa saat konseling.\n" + "Bukan diagnosis atau pengganti tenaga profesional.",
-            iconDescription = "📊"
+            iconDescription = "notes_slide_icon.png",
+            iconRes = R.drawable.notes_slide_icon
         )
     )
 
@@ -114,14 +143,13 @@ class OnboardingViewModel(
                 isConsentChecked = false,
                 isConsentAccepted = false,
                 isLoading = false,
-                errorMessage = null
+                errorMessage = null,
+                isSyncing = false,
+                syncErrorMessage = null
             )
         }
     }
 
-    /**
-     * Resets the onboarding state back to slide 1 of the carousel (used when clearing all data).
-     */
     fun resetToOnboarding() {
         _uiState.value = OnboardingUiState(
             currentDestination = OnboardingDestination.ONBOARDING_CAROUSEL,
@@ -177,6 +205,9 @@ class OnboardingViewModel(
         _uiState.update { it.copy(isConsentChecked = checked, errorMessage = null) }
     }
 
+    /**
+     * Menyimpan persetujuan pengguna (consent) lalu berpindah ke layar penawaran pencadangan awan (opsional).
+     */
     fun submitConsentAndComplete(): Job {
         val state = _uiState.value
         if (!state.isConsentChecked || state.isLoading) {
@@ -196,6 +227,42 @@ class OnboardingViewModel(
                 return@launch
             }
 
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    isConsentAccepted = true,
+                    currentDestination = OnboardingDestination.CLOUD_BACKUP_PROMPT
+                )
+            }
+        }
+    }
+
+    // ==========================================
+    // Cloud Backup Screen Interactions
+    // ==========================================
+
+    fun setCloudBackupMode(isRegister: Boolean) {
+        _uiState.update { it.copy(isCloudBackupMode = isRegister, syncErrorMessage = null) }
+    }
+
+    fun setBackupEmail(email: String) {
+        _uiState.update { it.copy(backupEmail = email, syncErrorMessage = null) }
+    }
+
+    fun setBackupPassword(password: String) {
+        _uiState.update { it.copy(backupPassword = password, syncErrorMessage = null) }
+    }
+
+    fun setBackupUserName(userName: String) {
+        _uiState.update { it.copy(backupUserName = userName, syncErrorMessage = null) }
+    }
+
+    /**
+     * Pengguna memilih untuk melewati pencadangan awan (offline-first).
+     */
+    fun skipCloudBackup(): Job {
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        return viewModelScope.launch {
             val completeResult = completeOnboardingUseCase()
             if (completeResult.isFailure) {
                 _uiState.update {
@@ -207,20 +274,107 @@ class OnboardingViewModel(
                 return@launch
             }
 
+            val dest = if (isPinSetProvider()) {
+                OnboardingDestination.NAVIGATE_TO_APP_LOCK
+            } else {
+                OnboardingDestination.NAVIGATE_TO_DASHBOARD
+            }
+
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    isConsentAccepted = true,
                     isOnboardingCompleted = true,
-                    currentDestination = OnboardingDestination.NAVIGATE_TO_DASHBOARD
+                    currentDestination = dest
                 )
+            }
+        }
+    }
+
+    /**
+     * Mendaftarkan akun baru atau masuk untuk pencadangan/pemulihan awan.
+     */
+    fun submitCloudAuth(): Job {
+        val state = _uiState.value
+        val email = state.backupEmail.trim()
+        val password = state.backupPassword
+        val userName = state.backupUserName.trim()
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            _uiState.update { it.copy(syncErrorMessage = "Format email tidak valid") }
+            return Job().apply { complete() }
+        }
+        if (password.length < 8) {
+            _uiState.update { it.copy(syncErrorMessage = "Kata sandi minimal 8 karakter") }
+            return Job().apply { complete() }
+        }
+
+        _uiState.update { it.copy(isSyncing = true, syncErrorMessage = null) }
+        return viewModelScope.launch {
+            try {
+                val client = apiClient ?: SelarasApiClient()
+                val authResult = if (state.isCloudBackupMode) {
+                    client.register(RegisterRequestDto(email, password, userName.ifBlank { null }))
+                } else {
+                    client.login(LoginRequestDto(email, password))
+                }
+
+                if (authResult.isFailure) {
+                    _uiState.update {
+                        it.copy(
+                            isSyncing = false,
+                            syncErrorMessage = authResult.exceptionOrNull()?.message ?: "Gagal terhubung ke akun awan"
+                        )
+                    }
+                    return@launch
+                }
+
+                val response = authResult.getOrThrow()
+                authSessionManager?.saveSession(
+                    token = response.token,
+                    email = response.user.email,
+                    userId = response.user.id,
+                    userName = response.user.userName
+                )
+
+                // Eksekusi sinkronisasi data awal (Smart Merge LWW)
+                if (state.isCloudBackupMode) {
+                    syncCoordinator?.backup()
+                } else {
+                    syncCoordinator?.restore()
+                }
+
+                completeOnboardingUseCase()
+
+                val dest = if (isPinSetProvider()) {
+                    OnboardingDestination.NAVIGATE_TO_APP_LOCK
+                } else {
+                    OnboardingDestination.NAVIGATE_TO_DASHBOARD
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        isOnboardingCompleted = true,
+                        currentDestination = dest
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        syncErrorMessage = e.message ?: "Terjadi kesalahan saat otentikasi awan"
+                    )
+                }
             }
         }
     }
 
     class Factory(
         private val repository: AppSettingsRepository,
-        private val isPinSetProvider: () -> Boolean = { false }
+        private val isPinSetProvider: () -> Boolean = { false },
+        private val authSessionManager: AuthSessionManager? = null,
+        private val syncCoordinator: SyncCoordinator? = null,
+        private val apiClient: SelarasApiClient? = null
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(OnboardingViewModel::class.java))
@@ -229,7 +383,16 @@ class OnboardingViewModel(
             val accept = AcceptConsentUseCase(repository)
             val complete = CompleteOnboardingUseCase(repository)
             @Suppress("UNCHECKED_CAST")
-            return OnboardingViewModel(init, get, accept, complete, isPinSetProvider) as T
+            return OnboardingViewModel(
+                init,
+                get,
+                accept,
+                complete,
+                isPinSetProvider,
+                authSessionManager,
+                syncCoordinator,
+                apiClient
+            ) as T
         }
     }
 }

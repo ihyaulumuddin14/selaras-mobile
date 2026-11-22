@@ -40,6 +40,7 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToHelp: () -> Unit,
     modifier: Modifier = Modifier,
+    isPinSet: Boolean = true,
     onNavigateToEditCheckIn: () -> Unit = onNavigateToCheckIn,
     onNavigateToWeeklyAnalysis: () -> Unit = onNavigateToCheckIn
 ) {
@@ -62,11 +63,12 @@ fun DashboardScreen(
             .background(backgroundCanvas)
             .verticalScroll(scrollState)
     ) {
-        // 1. Contextual Header
+        // 1. Contextual Header (Badge shown if username or PIN is not configured)
         DashboardHeader(
             greeting = state.greeting,
             formattedDate = state.formattedDate,
-            onNavigateToSettings = onNavigateToSettings
+            onNavigateToSettings = onNavigateToSettings,
+            hasSettingsBadge = !state.isNameSet || !isPinSet
         )
 
         Column(

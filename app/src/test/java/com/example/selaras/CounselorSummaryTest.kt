@@ -14,18 +14,27 @@ import com.example.selaras.domain.usecase.counselor.CreateCounselorSummaryUseCas
 import com.example.selaras.domain.usecase.counselor.GetCounselorEligibilityUseCase
 import com.example.selaras.features.counselor.CounselorScreenState
 import com.example.selaras.features.counselor.CounselorSummaryViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
+import java.time.Instant
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CounselorSummaryTest {
 
+    private val testDispatcher = UnconfinedTestDispatcher()
     private lateinit var fakeCheckInRepository: FakeCheckInRepo
     private lateinit var fakeScreeningRepository: FakeScreeningRepo
     private lateinit var fakeCounselorRepository: FakeCounselorRepo
@@ -35,6 +44,7 @@ class CounselorSummaryTest {
 
     @Before
     fun setup() {
+        Dispatchers.setMain(testDispatcher)
         fakeCheckInRepository = FakeCheckInRepo()
         fakeScreeningRepository = FakeScreeningRepo()
         fakeCounselorRepository = FakeCounselorRepo()
@@ -45,6 +55,11 @@ class CounselorSummaryTest {
             fakeScreeningRepository,
             fakeCounselorRepository
         )
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
@@ -156,6 +171,218 @@ class CounselorSummaryTest {
         assertEquals(4, vm.uiState.value.recordedDays)
     }
 
+    @Test
+    fun `isTodayCheckedIn updates properly and can be checked`() {
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        assertFalse(vm.uiState.value.isTodayCheckedIn)
+        vm.setTodayCheckedIn(true)
+        assertTrue(vm.uiState.value.isTodayCheckedIn)
+        vm.setTodayCheckedIn(false)
+        assertFalse(vm.uiState.value.isTodayCheckedIn)
+    }
+
+    @Test
+    fun `toggleIncludeNotes selects all child notes and sets includePersonalNotes`() {
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+        vm.resetToEligible()
+
+        assertFalse(vm.uiState.value.includePersonalNotes)
+        assertFalse(vm.uiState.value.availableNotes.all { it.isSelected })
+
+        vm.toggleIncludeNotes(true)
+        assertTrue(vm.uiState.value.includePersonalNotes)
+        assertTrue(vm.uiState.value.availableNotes.all { it.isSelected })
+
+        vm.toggleIncludeNotes(false)
+        assertFalse(vm.uiState.value.includePersonalNotes)
+        assertTrue(vm.uiState.value.availableNotes.none { it.isSelected })
+    }
+
+    @Test
+    fun `unselecting all child notes automatically unselects parent includePersonalNotes`() {
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+        vm.resetToEligible()
+
+        // Select all notes first
+        vm.toggleIncludeNotes(true)
+        assertTrue(vm.uiState.value.includePersonalNotes)
+        assertEquals(2, vm.uiState.value.availableNotes.size)
+
+        // Unselect first note -> parent should still be selected
+        val firstDate = vm.uiState.value.availableNotes[0].date
+        val secondDate = vm.uiState.value.availableNotes[1].date
+        vm.toggleNoteItem(firstDate, false)
+        assertTrue(vm.uiState.value.includePersonalNotes)
+
+        // Unselect second (and last) note -> parent MUST be automatically unselected!
+        vm.toggleNoteItem(secondDate, false)
+        assertFalse(vm.uiState.value.includePersonalNotes)
+
+        // Re-selecting a single note should automatically select parent again
+        vm.toggleNoteItem(firstDate, true)
+        assertTrue(vm.uiState.value.includePersonalNotes)
+    }
+
+    @Test
+    fun `loadRealData with real checkins populates real dataflow`() = runBlocking {
+        val today = LocalDate.now()
+        // Seed 4 check-ins for the last 4 days
+        for (i in 0..3) {
+            val d = today.minusDays(i.toLong())
+            fakeCheckInRepository.saveCheckIn(
+                CheckIn(
+                    id = (i + 1).toLong(),
+                    checkInDate = d,
+                    mood = 4,
+                    energy = 8,
+                    sleepDurationMinutes = 480,
+                    note = "Catatan hari $i"
+                )
+            )
+        }
+
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        val state = vm.uiState.value
+        assertEquals(CounselorScreenState.SELECT_CONTENT, state.screenState)
+        assertEquals(4, state.recordedDays)
+        assertEquals(4.0, state.avgMood, 0.1)
+        assertEquals(8.0, state.avgEnergy, 0.1)
+        assertEquals(8.0, state.avgSleepHours, 0.1)
+        assertEquals(4, state.availableNotes.size)
+        assertTrue(state.isTodayCheckedIn)
+    }
+
+    @Test
+    fun `setupDummyDataForExportPdf sets up eligible state with 5 recorded days`() {
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        vm.setupDummyDataForExportPdf()
+        val state = vm.uiState.value
+        assertEquals(CounselorScreenState.SELECT_CONTENT, state.screenState)
+        assertEquals(5, state.recordedDays)
+        assertEquals(7, state.totalDays)
+        assertEquals(3.4, state.avgMood, 0.1)
+        assertEquals(6.8, state.avgSleepHours, 0.1)
+        assertEquals(6.0, state.avgEnergy, 0.1)
+        // Dummy data contains 9 screenings and 9 notes, with different created_at
+        assertEquals(9, state.availableScreenings.size)
+        assertEquals(9, state.availableNotes.size)
+        assertTrue(state.includePersonalNotes)
+
+        // When creating summary, fallback generates valid dummy summary for export
+        vm.createSummary()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(CounselorScreenState.PREVIEW, vm.uiState.value.screenState)
+        assertTrue(vm.uiState.value.createdSummary != null)
+    }
+
+    @Test
+    fun `screenings limited to 7 newest based on createdAt`() = runBlocking {
+        val today = LocalDate.now()
+        val now = java.time.Instant.now()
+
+        // Seed 10 screenings with different createdAt
+        for (i in 0..9) {
+            fakeScreeningRepository.submitScreening(
+                ScreeningResult(
+                    id = (i + 1).toLong(),
+                    screeningType = ScreeningType.MANUAL,
+                    periodStartDate = today.minusDays(10),
+                    periodEndDate = today,
+                    instrumentVersion = "PHQ-9",
+                    totalScore = 5 + i,
+                    category = ScreeningCategory.MINIMAL,
+                    helpIndicator = false,
+                    createdAt = now.minusSeconds((10 - i) * 1000L) // i=9 is newest
+                ),
+                emptyList()
+            )
+        }
+
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        vm.loadRealData()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val screenings = vm.uiState.value.availableScreenings
+        assertEquals(7, screenings.size)
+        // The newest item (i=9, totalScore=14) should be first
+        assertEquals(14, screenings.first().score)
+    }
+
+    @Test
+    fun `notes limited to 7 newest based on createdAt`() = runBlocking {
+        val today = LocalDate.now()
+        val now = java.time.Instant.now()
+
+        // Seed 10 check-ins with notes within observation period and different createdAt
+        for (i in 0..9) {
+            fakeCheckInRepository.saveCheckIn(
+                CheckIn(
+                    id = (i + 1).toLong(),
+                    checkInDate = today.minusDays((i % 5).toLong()),
+                    mood = 3,
+                    energy = 5,
+                    sleepDurationMinutes = 400,
+                    note = "Catatan $i",
+                    createdAt = now.minusSeconds((10 - i) * 1000L) // i=9 is newest
+                )
+            )
+        }
+
+        val vm = CounselorSummaryViewModel(
+            fakeCheckInRepository,
+            fakeScreeningRepository,
+            fakeCounselorRepository,
+            createSummaryUseCase,
+            getEligibilityUseCase
+        )
+
+        vm.loadRealData()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val notes = vm.uiState.value.availableNotes
+        assertEquals(7, notes.size)
+        // The newest item (i=9, note="Catatan 9") should be first
+        assertEquals("Catatan 9", notes.first().noteText)
+    }
+
     // Fake Repositories
     private class FakeCheckInRepo : CheckInRepository {
         val checkIns = mutableListOf<CheckIn>()
@@ -204,6 +431,24 @@ class CounselorSummaryTest {
         override fun getLatestScreeningResultFlow(): Flow<ScreeningResult?> = flowOf(screenings.lastOrNull())
         override suspend fun getLatestRoutineScreeningResult(): ScreeningResult? = null
         override suspend fun getAnswersByScreeningResultId(screeningResultId: Long) = emptyList<com.example.selaras.domain.model.ScreeningAnswer>()
+        override suspend fun getScreeningTypesUsedThisWeek(
+            referenceDate: LocalDate
+        ): Set<ScreeningType> {
+            return emptySet()
+        }
+
+        override suspend fun countScreeningResultsByTypeBetween(
+            screeningType: ScreeningType,
+            startInclusive: Instant,
+            endExclusive: Instant
+        ): Int {
+            return screenings.count { result ->
+                result.screeningType == screeningType &&
+                        result.completedAt >= startInclusive &&
+                        result.completedAt < endExclusive
+            }
+        }
+
     }
 
     private class FakeCounselorRepo : CounselorRepository {
