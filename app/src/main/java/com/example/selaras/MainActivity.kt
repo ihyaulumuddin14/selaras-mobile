@@ -35,6 +35,8 @@ import com.example.selaras.features.security.AppLockViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.ViewModel
+import com.example.selaras.features.screening.ScreeningViewModel
 
 /**
  * Root destinations for application lifecycle and security gates.
@@ -53,6 +55,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var dashboardViewModel: DashboardViewModel
     private lateinit var checkInViewModel: CheckInViewModel
     private lateinit var breathingViewModel: BreathingViewModel
+    private lateinit var screeningViewModel: ScreeningViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,6 +95,25 @@ class MainActivity : ComponentActivity() {
             BreathingViewModel.Factory(container.breathingRepository)
         )[BreathingViewModel::class.java]
 
+        screeningViewModel = ViewModelProvider(
+            this,
+            object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    if (modelClass.isAssignableFrom(ScreeningViewModel::class.java)) {
+                        @Suppress("UNCHECKED_CAST")
+                        return ScreeningViewModel(
+                            submitScreeningUseCase = container.submitScreeningUseCase,
+                            screeningRepository = container.screeningRepository,
+                            getScreeningQuotaUseCase = container.getScreeningQuotaUseCase
+                        ) as T
+                    }
+                    throw IllegalArgumentException(
+                        "Unknown ViewModel class: ${modelClass.name}"
+                    )
+                }
+            }
+        )[ScreeningViewModel::class.java]
+
         enableEdgeToEdge()
         setContent {
             SelarasTheme {
@@ -101,7 +123,8 @@ class MainActivity : ComponentActivity() {
                     appLockViewModel = appLockViewModel,
                     dashboardViewModel = dashboardViewModel,
                     checkInViewModel = checkInViewModel,
-                    breathingViewModel = breathingViewModel
+                    breathingViewModel = breathingViewModel,
+                    screeningViewModel = screeningViewModel
                 )
             }
         }
@@ -116,7 +139,8 @@ fun MainApp(
     dashboardViewModel: DashboardViewModel,
     checkInViewModel: CheckInViewModel,
     breathingViewModel: BreathingViewModel,
-    modifier: Modifier = Modifier
+    screeningViewModel: ScreeningViewModel,
+    modifier: Modifier = Modifier,
 ) {
     var rootDestination by remember { mutableStateOf(AppRootDestination.ONBOARDING) }
     val coroutineScope = rememberCoroutineScope()
@@ -166,6 +190,7 @@ fun MainApp(
                     dashboardViewModel = dashboardViewModel,
                     checkInViewModel = checkInViewModel,
                     breathingViewModel = breathingViewModel,
+                    screeningViewModel = screeningViewModel,
                     appLockViewModel = appLockViewModel,
                     onResetToOnboarding = {
                         coroutineScope.launch {

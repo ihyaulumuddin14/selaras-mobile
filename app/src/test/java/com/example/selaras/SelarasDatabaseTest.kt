@@ -250,7 +250,7 @@ class SelarasDatabaseTest {
             periodEndDate = LocalDate.of(2026, 10, 28),
             instrumentVersion = "PHQ-9 v1.0",
             completedAt = now,
-            totalScore = 15,
+            totalScore = 17,
             category = ScreeningCategory.SEDANG_BERAT,
             helpIndicator = true,
             createdAt = now
@@ -271,7 +271,7 @@ class SelarasDatabaseTest {
 
         val fetched = repository.getScreeningResultById(resultId)
         assertNotNull(fetched)
-        assertEquals(15, fetched?.totalScore)
+        assertEquals(17, fetched?.totalScore)
         assertEquals(9, fetched?.answers?.size)
 
         // 2. Atomic rollback when submission fails (e.g. duplicate period)

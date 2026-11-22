@@ -10,6 +10,9 @@ import com.example.selaras.data.local.entity.ScreeningResultEntity
 import com.example.selaras.domain.model.ScreeningType
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
+import java.time.Instant
+
+
 
 @Dao
 interface ScreeningResultDao {
@@ -74,4 +77,36 @@ interface ScreeningResultDao {
         startDate: LocalDate,
         endDate: LocalDate
     ): List<ScreeningResultEntity>
+
+
+
+    @Query(
+        """
+    SELECT COUNT(*)
+    FROM screening_results
+    WHERE screening_type = :screeningType
+      AND julianday(completed_at) >= julianday(:startInclusive)
+      AND julianday(completed_at) < julianday(:endExclusive)
+    """
+    )
+    suspend fun countScreeningResultsByTypeBetween(
+        screeningType: ScreeningType,
+        startInclusive: Instant,
+        endExclusive: Instant
+    ): Int
+
+
+
+    @Query(
+        """
+    SELECT DISTINCT screening_type
+    FROM screening_results
+    WHERE julianday(completed_at) >= julianday(:startInclusive)
+      AND julianday(completed_at) < julianday(:endExclusive)
+    """
+    )
+    suspend fun getScreeningTypesBetween(
+        startInclusive: Instant,
+        endExclusive: Instant
+    ): List<ScreeningType>
 }

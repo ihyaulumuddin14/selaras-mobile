@@ -35,6 +35,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 
+
 class FakeCheckInRepository : CheckInRepository {
     private val checkIns = mutableListOf<CheckIn>()
     private val checkInsFlow = MutableStateFlow<List<CheckIn>>(emptyList())
@@ -116,10 +117,32 @@ class FakeScreeningRepository : ScreeningRepository {
     override suspend fun getLatestRoutineScreeningResult(): ScreeningResult? = _latestResult.value
     override suspend fun getAnswersByScreeningResultId(screeningResultId: Long): List<ScreeningAnswer> =
         emptyList()
+    override suspend fun getScreeningTypesUsedThisWeek(
+        referenceDate: LocalDate
+    ): Set<ScreeningType> {
+        return emptySet()
+    }
+    override suspend fun countScreeningResultsByTypeBetween(
+        screeningType: ScreeningType,
+        startInclusive: Instant,
+        endExclusive: Instant
+    ): Int {
+        val result = _latestResult.value ?: return 0
 
+        return if (
+            result.screeningType == screeningType &&
+            result.completedAt >= startInclusive &&
+            result.completedAt < endExclusive
+        ) {
+            1
+        } else {
+            0
+        }
+    }
     fun emitResult(result: ScreeningResult?) {
         _latestResult.value = result
     }
+
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

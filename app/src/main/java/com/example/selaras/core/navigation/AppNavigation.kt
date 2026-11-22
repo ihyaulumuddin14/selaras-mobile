@@ -38,10 +38,8 @@ import com.example.selaras.features.screening.ScreeningScreen
 import com.example.selaras.features.security.AppLockMasterScreen
 import com.example.selaras.features.security.AppLockViewModel
 import com.example.selaras.features.settings.SettingsScreen
+import com.example.selaras.features.screening.ScreeningViewModel
 
-/**
- * Sub-destinations that push on top of the bottom navigation bar.
- */
 enum class SubDestination {
     NONE,
     BREATHING,
@@ -50,18 +48,13 @@ enum class SubDestination {
     PIN_SETUP
 }
 
-/**
- * Main application navigation coordinator (ADR-011, ADR-013).
- *
- * Manages the 5 BottomNav tabs (Beranda, Check-in, Skrining, Riwayat, Bantuan)
- * and deep flows into feature detail screens with system BackHandler integration.
- */
 @Composable
 fun AppNavigation(
     container: AppContainer,
     dashboardViewModel: DashboardViewModel,
     checkInViewModel: CheckInViewModel,
     breathingViewModel: BreathingViewModel,
+    screeningViewModel: ScreeningViewModel,
     appLockViewModel: AppLockViewModel? = null,
     onResetToOnboarding: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -71,9 +64,11 @@ fun AppNavigation(
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
 
-    // System BackHandler: handles sub-destinations, tabs, and double-press to exit
     BackHandler(enabled = true) {
         if (subDestination != SubDestination.NONE) {
+            if (subDestination == SubDestination.COUNSELOR_SUMMARY) {
+                container.screeningHandoffStore.clear()
+            }
             subDestination = SubDestination.NONE
         } else if (currentTab != NavTab.HOME) {
             currentTab = NavTab.HOME
@@ -177,7 +172,10 @@ fun AppNavigation(
                                         },
                                         onNavigateToBreathing = { subDestination = SubDestination.BREATHING },
                                         onNavigateToScreening = { currentTab = NavTab.SCREENING },
-                                        onNavigateToCounselorSummary = { subDestination = SubDestination.COUNSELOR_SUMMARY },
+                                        onNavigateToCounselorSummary = {
+                                            container.screeningHandoffStore.clear()
+                                            subDestination = SubDestination.COUNSELOR_SUMMARY
+                                        },
                                         onNavigateToSettings = { subDestination = SubDestination.SETTINGS },
                                         onNavigateToHelp = { currentTab = NavTab.HELP }
                                     )
@@ -190,16 +188,31 @@ fun AppNavigation(
                                     )
                                 }
 
+
                                 NavTab.SCREENING -> {
                                     ScreeningScreen(
-                                        onStartScreening = { /* Ready for PHQ-9 Question flow */ }
+                                        viewModel = screeningViewModel,
+                                        onOpenHelp = {
+                                            currentTab = NavTab.HELP
+                                        },
+                                        onOpenHistory = {
+                                            currentTab = NavTab.HISTORY
+                                        },
+                                        onOpenCounselorSummary = { resultId ->
+                                            container.screeningHandoffStore.selectResult(resultId)
+                                            subDestination = SubDestination.COUNSELOR_SUMMARY
+                                        }
                                     )
                                 }
+
 
                                 NavTab.HISTORY -> {
                                     HistoryScreen(
                                         onNavigateToCheckInHistory = { currentTab = NavTab.CHECK_IN },
-                                        onNavigateToCounselorPdf = { subDestination = SubDestination.COUNSELOR_SUMMARY }
+                                        onNavigateToCounselorPdf = {
+                                            container.screeningHandoffStore.clear()
+                                            subDestination = SubDestination.COUNSELOR_SUMMARY
+                                        }
                                     )
                                 }
 
@@ -241,7 +254,10 @@ fun AppNavigation(
                             .consumeWindowInsets(innerPadding)
                     ) {
                         CounselorSummaryScreen(
-                            onNavigateBack = { subDestination = SubDestination.NONE }
+                            onNavigateBack = {
+                                container.screeningHandoffStore.clear()
+                                subDestination = SubDestination.NONE
+                            }
                         )
                     }
                 }
