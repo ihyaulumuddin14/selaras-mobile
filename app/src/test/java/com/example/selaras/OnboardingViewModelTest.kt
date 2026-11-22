@@ -131,7 +131,7 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun testConsentSubmissionCompletesOnboarding() = runTest(testDispatcher) {
+    fun testConsentSubmissionProceedsToCloudBackupAndCanBeSkipped() = runTest(testDispatcher) {
         viewModel.skipToConsent()
         assertEquals(OnboardingDestination.INFORMED_CONSENT, viewModel.uiState.value.currentDestination)
         assertFalse(viewModel.uiState.value.isConsentChecked)
@@ -140,17 +140,24 @@ class OnboardingViewModelTest {
         viewModel.submitConsentAndComplete().join()
         assertEquals(OnboardingDestination.INFORMED_CONSENT, viewModel.uiState.value.currentDestination)
 
-        // Check consent and submit
+        // Check consent and submit -> proceeds to Cloud Backup Prompt
         viewModel.setConsentChecked(true)
         assertTrue(viewModel.uiState.value.isConsentChecked)
 
         viewModel.submitConsentAndComplete().join()
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
-        assertTrue(state.isConsentAccepted)
-        assertTrue(state.isOnboardingCompleted)
-        assertEquals(OnboardingDestination.NAVIGATE_TO_DASHBOARD, state.currentDestination)
+        val stateAfterConsent = viewModel.uiState.value
+        assertTrue(stateAfterConsent.isConsentAccepted)
+        assertEquals(OnboardingDestination.CLOUD_BACKUP_PROMPT, stateAfterConsent.currentDestination)
+
+        // User can skip cloud backup to remain completely offline
+        viewModel.skipCloudBackup().join()
+        advanceUntilIdle()
+
+        val stateAfterSkip = viewModel.uiState.value
+        assertTrue(stateAfterSkip.isOnboardingCompleted)
+        assertEquals(OnboardingDestination.NAVIGATE_TO_DASHBOARD, stateAfterSkip.currentDestination)
 
         // Verify stored in repository
         val storedSettings = repository.getSettings()

@@ -79,7 +79,10 @@ class MainActivity : ComponentActivity() {
             this,
             OnboardingViewModel.Factory(
                 repository = container.appSettingsRepository,
-                isPinSetProvider = { container.securityRepository.isPinSet() }
+                isPinSetProvider = { container.securityRepository.isPinSet() },
+                authSessionManager = container.authSessionManager,
+                syncCoordinator = container.syncCoordinator,
+                apiClient = container.apiClient
             )
         )[OnboardingViewModel::class.java]
 
