@@ -26,7 +26,7 @@ data class ScreeningQuotaUiState(
 class ScreeningViewModel(
     private val submitScreeningUseCase: SubmitScreeningUseCase,
     private val screeningRepository: ScreeningRepository,
-    private val instrumentVersion: String = DEMO_INSTRUMENT_VERSION,
+    private val instrumentVersion: String = DEFAULT_INSTRUMENT_VERSION,
     private val getScreeningQuotaUseCase: GetScreeningQuotaUseCase =
         GetScreeningQuotaUseCase(screeningRepository)
 ) : ViewModel() {
@@ -196,7 +196,7 @@ class ScreeningViewModel(
 
                 _uiState.update {
                     it.copy(
-                        step = if (!isDemoMode && result.helpIndicator) {
+                        step = if (result.helpIndicator) {
                             ScreeningStep.CRISIS
                         } else {
                             ScreeningStep.RESULT
@@ -254,13 +254,10 @@ class ScreeningViewModel(
         }
     }
 
-    private val isDemoMode: Boolean
-        get() = instrumentVersion.startsWith(DEMO_INSTRUMENT_PREFIX, ignoreCase = true)
-
     companion object {
+        const val PHQ9_INSTRUMENT_VERSION = "PHQ-9"
+        const val DEFAULT_INSTRUMENT_VERSION = PHQ9_INSTRUMENT_VERSION
         const val DEMO_INSTRUMENT_VERSION = "DEMO-REFLECTION-v1"
-        const val DEFAULT_INSTRUMENT_VERSION = DEMO_INSTRUMENT_VERSION
-        private const val DEMO_INSTRUMENT_PREFIX = "DEMO-"
         private const val MIN_ANSWER = 0
         private const val MAX_ANSWER = 3
     }

@@ -105,7 +105,7 @@ class ScreeningViewModelTest {
     }
 
     @Test
-    fun submittingNineDemoAnswersSavesResultAndConsumesOnlySelectedQuota() = runTest {
+    fun submittingAnswersTriggersCrisisWhenIndicatedAndCanContinueToResult() = runTest {
         val repository = FakeScreeningRepository()
 
         withViewModel(repository) { viewModel, fakeRepository ->
@@ -113,20 +113,44 @@ class ScreeningViewModelTest {
             viewModel.submitScreening()
             advanceUntilIdle()
 
-            val state = viewModel.uiState.value
-            assertEquals(ScreeningStep.RESULT, state.step)
-            assertNotNull(state.result)
-            assertEquals(27, state.result?.totalScore)
-            assertEquals(ScreeningViewModel.DEMO_INSTRUMENT_VERSION, state.result?.instrumentVersion)
-            assertFalse(state.result!!.helpIndicator)
+            val crisisState = viewModel.uiState.value
+            assertEquals(ScreeningStep.CRISIS, crisisState.step)
+            assertNotNull(crisisState.result)
+            assertEquals(27, crisisState.result?.totalScore)
+            assertEquals(ScreeningViewModel.DEFAULT_INSTRUMENT_VERSION, crisisState.result?.instrumentVersion)
+            assertTrue(crisisState.result!!.helpIndicator)
             assertEquals(1, fakeRepository.savedResults.size)
-            assertEquals(9, fakeRepository.savedAnswers[state.result!!.id]?.size)
+            assertEquals(9, fakeRepository.savedAnswers[crisisState.result!!.id]?.size)
+
+            viewModel.continueToResult()
+            val resultState = viewModel.uiState.value
+            assertEquals(ScreeningStep.RESULT, resultState.step)
 
             val quota = viewModel.quotaUiState.value.quota
             assertTrue(quota!!.manualUsed)
             assertFalse(quota.manualAvailable)
             assertTrue(quota.routineAvailable)
             assertEquals(1, quota.routineRemaining)
+        }
+    }
+
+    @Test
+    fun submittingAnswersWithoutCrisisTransitionsDirectlyToResult() = runTest {
+        val repository = FakeScreeningRepository()
+
+        withViewModel(repository) { viewModel, fakeRepository ->
+            answerAllQuestions(viewModel, values = listOf(1, 1, 1, 1, 1, 1, 1, 1, 0))
+            viewModel.submitScreening()
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(ScreeningStep.RESULT, state.step)
+            assertNotNull(state.result)
+            assertEquals(8, state.result?.totalScore)
+            assertEquals(ScreeningViewModel.DEFAULT_INSTRUMENT_VERSION, state.result?.instrumentVersion)
+            assertFalse(state.result!!.helpIndicator)
+            assertEquals(1, fakeRepository.savedResults.size)
+            assertEquals(9, fakeRepository.savedAnswers[state.result!!.id]?.size)
         }
     }
 
@@ -232,16 +256,18 @@ class ScreeningViewModelTest {
             viewModel.selectAnswer(questionNumber = 1, answerValue = 0)
             viewModel.nextQuestion()
 
-            (2..9).forEach { number ->
+            (2..8).forEach { number ->
                 viewModel.selectAnswer(questionNumber = number, answerValue = 1)
-                if (number < 9) viewModel.nextQuestion()
+                viewModel.nextQuestion()
             }
+            viewModel.selectAnswer(questionNumber = 9, answerValue = 0)
             viewModel.submitScreening()
             advanceUntilIdle()
 
             assertEquals(ScreeningStep.RESULT, viewModel.uiState.value.step)
-            assertEquals(8, viewModel.uiState.value.result?.totalScore)
+            assertEquals(7, viewModel.uiState.value.result?.totalScore)
             assertEquals(0, repository.savedAnswers.values.single().first { it.questionNumber == 1 }.answerValue)
+            assertEquals(0, repository.savedAnswers.values.single().first { it.questionNumber == 9 }.answerValue)
         }
     }
 
@@ -305,7 +331,7 @@ class ScreeningViewModelTest {
 
     private fun answerAllQuestions(
         viewModel: ScreeningViewModel,
-        values: List<Int> = List(9) { 1 },
+        values: List<Int> = listOf(1, 1, 1, 1, 1, 1, 1, 1, 0),
         isRoutine: Boolean = false
     ) {
         startQuestions(viewModel, isRoutine)
@@ -438,7 +464,7 @@ class ScreeningViewModelTest {
             screeningType = type,
             periodStartDate = LocalDate.now().minusDays(13),
             periodEndDate = LocalDate.now(),
-            instrumentVersion = ScreeningViewModel.DEMO_INSTRUMENT_VERSION,
+            instrumentVersion = ScreeningViewModel.DEFAULT_INSTRUMENT_VERSION,
             completedAt = completedAt,
             totalScore = 0,
             category = ScreeningCategory.MINIMAL,
