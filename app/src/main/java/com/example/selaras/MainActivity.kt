@@ -36,7 +36,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
+import com.example.selaras.domain.model.CheckIn
+import com.example.selaras.domain.repository.CheckInRepository
 import com.example.selaras.features.screening.ScreeningViewModel
+import java.time.LocalDate
 
 /**
  * Root destinations for application lifecycle and security gates.
@@ -60,6 +64,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         container = (application as SelarasApplication).container
+
+        // =========================================================================
+        // DEMO SEEDER: Dummy check-in untuk demo aplikasi.
+        // Hapus tanda komentar (uncomment) blok di bawah agar Analisis Mingguan &
+        // Ringkasan Konselor langsung terbuka (terisi 5 hari check-in).
+        // Pasang tanda komentar kembali (comment) untuk rollback ke alur normal.
+        // =========================================================================
+        lifecycleScope.launch(Dispatchers.IO) {
+            seedDemoCheckIns(container.checkInRepository)
+        }
 
         onboardingViewModel = ViewModelProvider(
             this,
@@ -127,6 +141,52 @@ class MainActivity : ComponentActivity() {
                     breathingViewModel = breathingViewModel,
                     screeningViewModel = screeningViewModel
                 )
+            }
+        }
+    }
+
+    private suspend fun seedDemoCheckIns(checkInRepository: CheckInRepository) {
+        val today = LocalDate.now()
+        val dummyEntries = listOf(
+            CheckIn(
+                checkInDate = today.minusDays(4),
+                mood = 4,
+                energy = 7,
+                sleepDurationMinutes = 450,
+                note = "Merasakan kemajuan setelah istirahat cukup."
+            ),
+            CheckIn(
+                checkInDate = today.minusDays(3),
+                mood = 3,
+                energy = 5,
+                sleepDurationMinutes = 390,
+                note = "Cukup banyak pekerjaan hari ini, terasa sedikit penat."
+            ),
+            CheckIn(
+                checkInDate = today.minusDays(2),
+                mood = 4,
+                energy = 8,
+                sleepDurationMinutes = 480,
+                note = "Berjalan santai di pagi hari sangat menyegarkan pikiran."
+            ),
+            CheckIn(
+                checkInDate = today.minusDays(1),
+                mood = 2,
+                energy = 4,
+                sleepDurationMinutes = 330,
+                note = "Merasa cemas memikirkan evaluasi mingguan, butuh teman bicara."
+            ),
+            CheckIn(
+                checkInDate = today,
+                mood = 4,
+                energy = 7,
+                sleepDurationMinutes = 460,
+                note = "Menghabiskan waktu membaca buku, suasana hati lebih tenang."
+            )
+        )
+        dummyEntries.forEach { checkIn ->
+            if (checkInRepository.getCheckInByDate(checkIn.checkInDate) == null) {
+                checkInRepository.saveCheckIn(checkIn)
             }
         }
     }
