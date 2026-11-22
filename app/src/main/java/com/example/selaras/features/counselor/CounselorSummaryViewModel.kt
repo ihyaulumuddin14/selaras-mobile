@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.selaras.domain.model.CheckIn
-import com.example.selaras.domain.model.CounselorEligibility
 import com.example.selaras.domain.model.CounselorSummary
 import com.example.selaras.domain.model.ScreeningAnswer
 import com.example.selaras.domain.model.ScreeningCategory
@@ -19,6 +18,8 @@ import com.example.selaras.domain.repository.ScreeningRepository
 import com.example.selaras.domain.usecase.counselor.CreateCounselorSummaryUseCase
 import com.example.selaras.domain.usecase.counselor.ExportCounselorSummaryPdfUseCase
 import com.example.selaras.domain.usecase.counselor.GetCounselorEligibilityUseCase
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,22 +29,21 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import kotlin.math.roundToInt
 
 enum class CounselorScreenState {
-    SELECT_CONTENT,    // Figma 168:2333: Check-in 4/7, optional screening & notes
-    INELIGIBLE,        // Figma 168:2334: < 4 days (3/7), alert warning
-    PREPARING,         // Figma 168:2339: Menyiapkan ringkasanmu... (loading)
-    PREVIEW,           // Figma 168:2336 / 168:2337: Snapshot ditinjau S-01 / S-02
-    SOURCE_CHANGED,    // Figma 168:2338: Data berubah setelah ditinjau (r4 -> r5)
-    GENERATING_PDF,    // Figma 168:2340: Sedang menyiapkan PDF...
-    PDF_ERROR,         // Figma 168:2341: PDF belum berhasil disiapkan
-    EXPORT_SUCCESS     // Figma 168:2342: PDF siap kamu simpan
+    SELECT_CONTENT, INELIGIBLE, PREPARING, PREVIEW, SOURCE_CHANGED,
+    GENERATING_PDF, PDF_ERROR, EXPORT_SUCCESS
 }
 
 data class DailySummaryItem(
@@ -77,42 +77,37 @@ data class CounselorNoteUiItem(
 data class CounselorSummaryUiState(
     val screenState: CounselorScreenState = CounselorScreenState.SELECT_CONTENT,
     val isSimulatedMode: Boolean = false,
+    val isLoading: Boolean = false,
     val periodStartDate: LocalDate = LocalDate.of(2026, 10, 7),
     val periodEndDate: LocalDate = LocalDate.of(2026, 10, 13),
     val ruleVersion: String = "T06",
-    val recordedDays: Int = 4,
+    val recordedDays: Int = 0,
     val totalDays: Int = 7,
-    val recordedDates: List<LocalDate> = listOf(
-        LocalDate.of(2026, 10, 7),
-        LocalDate.of(2026, 10, 9),
-        LocalDate.of(2026, 10, 11),
-        LocalDate.of(2026, 10, 13)
-    ),
-    val missingDates: List<LocalDate> = listOf(
-        LocalDate.of(2026, 10, 8),
-        LocalDate.of(2026, 10, 10),
-        LocalDate.of(2026, 10, 12)
-    ),
-    val avgMood: Double = 2.0,
-    val avgSleepHours: Double = 6.0,
-    val avgEnergy: Double = 5.0, // Scale 1..10
+    val recordedDates: List<LocalDate> = emptyList(),
+    val missingDates: List<LocalDate> = emptyList(),
+    val avgMood: Double = 0.0,
+    val avgSleepHours: Double = 0.0,
+    val avgEnergy: Double = 0.0,
     val dailyItems: List<DailySummaryItem> = emptyList(),
-    // Content selection
-    val selectCheckIn: Boolean = true, // mandatory
+    val selectCheckIn: Boolean = true,
     val selectScreeningManual: Boolean = false,
     val selectScreeningRoutine: Boolean = false,
     val includePersonalNotes: Boolean = false,
     val selectNoteN09: Boolean = false,
     val selectNoteN11: Boolean = false,
-    // Real dynamic selection items
+    val selectedNoteDates: Set<LocalDate> = emptySet(),
     val availableScreenings: List<CounselorScreeningUiItem> = emptyList(),
     val availableNotes: List<CounselorNoteUiItem> = emptyList(),
+    val availableManualScreening: ScreeningResult? = null,
+    val availableRoutineScreening: ScreeningResult? = null,
+    val handoffResultId: Long? = null,
+    val previewScreenings: List<ScreeningResult> = emptyList(),
+    val previewSummary: CounselorSummary? = null,
     val createdSummary: CounselorSummary? = null,
     val isTodayCheckedIn: Boolean = false,
-    // Snapshot info
     val snapshotId: String = "S-01",
     val sourceRevision: String = "r4",
-    val createdTimeString: String = "13 Oktober 2026 · 14.30",
+    val createdTimeString: String = "",
     val generatedPdfFile: File? = null,
     val errorMessage: String? = null
 )
@@ -123,16 +118,49 @@ class CounselorSummaryViewModel(
     private val counselorRepository: CounselorRepository,
     private val createSummaryUseCase: CreateCounselorSummaryUseCase,
     private val getEligibilityUseCase: GetCounselorEligibilityUseCase,
-    private val exportPdfUseCase: ExportCounselorSummaryPdfUseCase = ExportCounselorSummaryPdfUseCase()
+    private val exportPdfUseCase: ExportCounselorSummaryPdfUseCase = ExportCounselorSummaryPdfUseCase(),
+    private val previewMode: Boolean = false,
+    private val autoLoad: Boolean = false
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(buildDefaultInitialState())
+    private val _uiState = MutableStateFlow(
+        if (previewMode) buildDefaultInitialState() else CounselorSummaryUiState()
+    )
     val uiState: StateFlow<CounselorSummaryUiState> = _uiState.asStateFlow()
+    private var lastHandoffId: Long? = null
 
     init {
-        setupDefaultDailyItems()
-        loadRealData()
+        if (previewMode) {
+            setupDefaultDailyItems()
+        } else if (autoLoad) {
+            setupDefaultDailyItems()
+            loadRealData()
+        }
     }
+
+    private fun buildDefaultInitialState(): CounselorSummaryUiState = CounselorSummaryUiState(
+        isSimulatedMode = true,
+        isLoading = false,
+        periodStartDate = LocalDate.of(2026, 10, 7),
+        periodEndDate = LocalDate.of(2026, 10, 13),
+        recordedDays = 4,
+        totalDays = 7,
+        recordedDates = listOf(
+            LocalDate.of(2026, 10, 7),
+            LocalDate.of(2026, 10, 9),
+            LocalDate.of(2026, 10, 11),
+            LocalDate.of(2026, 10, 13)
+        ),
+        missingDates = listOf(
+            LocalDate.of(2026, 10, 8),
+            LocalDate.of(2026, 10, 10),
+            LocalDate.of(2026, 10, 12)
+        ),
+        avgMood = 2.0,
+        avgSleepHours = 6.0,
+        avgEnergy = 5.0,
+        createdTimeString = "13 Oktober 2026 · 14.30"
+    )
 
     private fun setupDefaultDailyItems() {
         val startDate = LocalDate.of(2026, 10, 7)
@@ -190,46 +218,45 @@ class CounselorSummaryViewModel(
         }
     }
 
-    private fun buildDefaultInitialState(): CounselorSummaryUiState {
-        return CounselorSummaryUiState(
-            screenState = CounselorScreenState.SELECT_CONTENT,
-            periodStartDate = LocalDate.of(2026, 10, 7),
-            periodEndDate = LocalDate.of(2026, 10, 13),
-            recordedDays = 4,
-            totalDays = 7,
-            avgMood = 2.0,
-            avgSleepHours = 6.0,
-            avgEnergy = 5.0
-        )
-    }
-
     /**
      * Loads and observes real check-in and screening data from Room repositories.
      */
     fun loadRealData() {
+        if (previewMode) return
         viewModelScope.launch {
-            val today = LocalDate.now()
-            val latest = checkInRepository.getLatestCheckIn()
-            val endDate = if (latest != null && latest.checkInDate.isAfter(today)) {
-                latest.checkInDate
-            } else {
-                today
-            }
-            val startDate = endDate.minusDays(6)
+            try {
+                val today = LocalDate.now()
+                val latest = checkInRepository.getLatestCheckIn()
+                val endDate = if (latest != null && latest.checkInDate.isAfter(today)) {
+                    latest.checkInDate
+                } else {
+                    today
+                }
+                val startDate = endDate.minusDays(6)
 
-            checkInRepository.getCheckInsBetweenFlow(startDate, endDate)
-                .catch { /* ignore */ }
-                .collect { checkIns ->
-                    if (checkIns.isNotEmpty()) {
+                checkInRepository.getCheckInsBetweenFlow(startDate, endDate)
+                    .catch { e ->
+                        _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
+                    }
+                    .collect { checkIns ->
                         val eligibility = getEligibilityUseCase(startDate, endDate)
                         val recordedDates = eligibility.recordedDates
                         val recordedCount = eligibility.recordedDays
                         val isEligible = eligibility.isEligible
 
-                        val avgMood = (checkIns.map { it.mood }.average() * 10).roundToInt() / 10.0
-                        val avgSleepMinutes = checkIns.map { it.sleepDurationMinutes }.average()
+                        val recordedCheckIns = checkIns.filter { it.checkInDate in startDate..endDate }
+                        val avgMood = if (recordedCheckIns.isNotEmpty()) {
+                            (recordedCheckIns.map { it.mood }.average() * 10).roundToInt() / 10.0
+                        } else 0.0
+
+                        val avgSleepMinutes = if (recordedCheckIns.isNotEmpty()) {
+                            recordedCheckIns.map { it.sleepDurationMinutes }.average()
+                        } else 0.0
                         val avgSleepHours = (avgSleepMinutes / 60.0 * 10).roundToInt() / 10.0
-                        val avgEnergy = (checkIns.map { it.energy }.average() * 10).roundToInt() / 10.0
+
+                        val avgEnergy = if (recordedCheckIns.isNotEmpty()) {
+                            (recordedCheckIns.map { it.energy }.average() * 10).roundToInt() / 10.0
+                        } else 0.0
 
                         val items = mutableListOf<DailySummaryItem>()
                         var curr = startDate
@@ -261,11 +288,11 @@ class CounselorSummaryViewModel(
 
                         val timeFmt = DateTimeFormatter.ofPattern("d MMMM yyyy · HH.mm", Locale.forLanguageTag("id"))
                         val timeStr = LocalDateTime.now().format(timeFmt)
-
                         val isTodayRecorded = checkIns.any { it.checkInDate == today }
 
                         _uiState.update { current ->
                             current.copy(
+                                isLoading = false,
                                 periodStartDate = startDate,
                                 periodEndDate = endDate,
                                 recordedDays = recordedCount,
@@ -277,6 +304,7 @@ class CounselorSummaryViewModel(
                                 avgEnergy = avgEnergy,
                                 dailyItems = items,
                                 availableNotes = if (notes.isNotEmpty()) notes else current.availableNotes,
+                                selectedNoteDates = notes.map { it.date }.toSet(),
                                 createdTimeString = timeStr,
                                 isTodayCheckedIn = isTodayRecorded,
                                 screenState = if (isEligible) {
@@ -287,7 +315,11 @@ class CounselorSummaryViewModel(
                             )
                         }
                     }
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Gagal memuat data check-in") }
+            }
         }
 
         viewModelScope.launch {
@@ -305,35 +337,106 @@ class CounselorSummaryViewModel(
                 .collect { screenings ->
                     if (screenings.isNotEmpty()) {
                         val dateFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
-                        val items = screenings.map { sc ->
-                            val typeLabel = if (sc.screeningType == ScreeningType.ROUTINE) "Skrining Berkala" else "Skrining Mandiri"
-                            val catLabel = when (sc.category.name.uppercase()) {
-                                "MINIMAL" -> "Gejala Minimal"
-                                "RINGAN" -> "Gejala Ringan"
-                                "SEDANG" -> "Gejala Sedang"
-                                "SEDANG_BERAT" -> "Gejala Sedang Berat"
-                                "BERAT" -> "Gejala Berat"
-                                else -> sc.category.name
+                        _uiState.update { current ->
+                            val items = screenings.map { sc ->
+                                val typeLabel = if (sc.screeningType == ScreeningType.ROUTINE) "Skrining Berkala" else "Skrining Mandiri"
+                                val catLabel = when (sc.category.name.uppercase()) {
+                                    "MINIMAL" -> "Gejala Minimal"
+                                    "RINGAN" -> "Gejala Ringan"
+                                    "SEDANG" -> "Gejala Sedang"
+                                    "SEDANG_BERAT" -> "Gejala Sedang Berat"
+                                    "BERAT" -> "Gejala Berat"
+                                    else -> sc.category.name
+                                }
+                                val dateStr = sc.periodEndDate.format(dateFmt)
+                                val wasSelected = current.availableScreenings.find { it.id == sc.id }?.isSelected == true || sc.id == current.handoffResultId
+                                CounselorScreeningUiItem(
+                                    id = sc.id,
+                                    title = "$typeLabel · $dateStr (Skor ${sc.totalScore})",
+                                    typeName = typeLabel,
+                                    dateString = dateStr,
+                                    score = sc.totalScore,
+                                    categoryText = catLabel,
+                                    isSelected = wasSelected,
+                                    details = "Instrumen: ${sc.instrumentVersion}\nSkor Total: ${sc.totalScore} / 27\nKategori: $catLabel\nDiselesaikan pada evaluasi PHQ-9"
+                                )
                             }
-                            val dateStr = sc.periodEndDate.format(dateFmt)
-                            CounselorScreeningUiItem(
-                                id = sc.id,
-                                title = "$typeLabel · $dateStr (Skor $sc.totalScore)",
-                                typeName = typeLabel,
-                                dateString = dateStr,
-                                score = sc.totalScore,
-                                categoryText = catLabel,
-                                isSelected = false,
-                                details = "Instrumen: ${sc.instrumentVersion}\nSkor Total: ${sc.totalScore} / 27\nKategori: $catLabel\nDiselesaikan pada evaluasi PHQ-9"
+                            val manual = screenings.sortedByDescending { it.completedAt }.firstOrNull { it.screeningType == ScreeningType.MANUAL }
+                            val routine = screenings.sortedByDescending { it.completedAt }.firstOrNull { it.screeningType == ScreeningType.ROUTINE }
+                            current.copy(
+                                availableScreenings = items,
+                                availableManualScreening = manual,
+                                availableRoutineScreening = routine
                             )
                         }
-                        _uiState.update { it.copy(availableScreenings = items) }
                     }
                 }
         }
     }
 
-    // Toggle content selection for screenings
+    fun refreshData() = loadRealData()
+
+    fun acceptHandoffResultId(id: Long) {
+        if (previewMode || id <= 0L || id == lastHandoffId) return
+        lastHandoffId = id
+        viewModelScope.launch {
+            try {
+                val result = screeningRepository.getScreeningResultById(id)
+                    ?: throw IllegalStateException("Hasil skrining #$id tidak ditemukan di penyimpanan perangkat.")
+                _uiState.update { state ->
+                    val isManual = result.screeningType == ScreeningType.MANUAL
+                    val existing = state.availableScreenings.find { it.id == id }
+                    val updatedScreenings = if (existing != null) {
+                        state.availableScreenings.map {
+                            if (it.id == id) it.copy(isSelected = true) else it
+                        }
+                    } else {
+                        val typeLabel = if (isManual) "Skrining Mandiri" else "Skrining Berkala"
+                        val catLabel = when (result.category.name.uppercase()) {
+                            "MINIMAL" -> "Gejala Minimal"
+                            "RINGAN" -> "Gejala Ringan"
+                            "SEDANG" -> "Gejala Sedang"
+                            "SEDANG_BERAT" -> "Gejala Sedang Berat"
+                            "BERAT" -> "Gejala Berat"
+                            else -> result.category.name
+                        }
+                        val dateFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("id"))
+                        val dateStr = result.periodEndDate.format(dateFmt)
+                        listOf(
+                            CounselorScreeningUiItem(
+                                id = result.id,
+                                title = "$typeLabel · $dateStr (Skor ${result.totalScore})",
+                                typeName = typeLabel,
+                                dateString = dateStr,
+                                score = result.totalScore,
+                                categoryText = catLabel,
+                                isSelected = true,
+                                details = "Instrumen: ${result.instrumentVersion}\nSkor Total: ${result.totalScore} / 27\nKategori: $catLabel\nDiselesaikan pada evaluasi PHQ-9"
+                            )
+                        ) + state.availableScreenings
+                    }
+
+                    state.copy(
+                        handoffResultId = id,
+                        availableScreenings = updatedScreenings,
+                        availableManualScreening = if (isManual) result else state.availableManualScreening,
+                        availableRoutineScreening = if (!isManual) result else state.availableRoutineScreening,
+                        selectScreeningManual = if (isManual) true else state.selectScreeningManual,
+                        selectScreeningRoutine = if (!isManual) true else state.selectScreeningRoutine,
+                        screenState = CounselorScreenState.SELECT_CONTENT,
+                        errorMessage = null
+                    )
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                _uiState.update { it.copy(errorMessage = exception.message ?: "Gagal membuka hasil skrining") }
+                lastHandoffId = null
+            }
+        }
+    }
+
+    // Toggle content selection for screenings by ID
     fun toggleScreeningItem(id: Long, selected: Boolean) {
         _uiState.update { current ->
             val updated = current.availableScreenings.map {
@@ -341,20 +444,22 @@ class CounselorSummaryViewModel(
             }
             current.copy(
                 availableScreenings = updated,
-                selectScreeningManual = updated.getOrNull(0)?.isSelected ?: false,
-                selectScreeningRoutine = updated.getOrNull(1)?.isSelected ?: false
+                selectScreeningManual = updated.find { it.typeName.contains("Mandiri", ignoreCase = true) }?.isSelected ?: false,
+                selectScreeningRoutine = updated.find { it.typeName.contains("Berkala", ignoreCase = true) }?.isSelected ?: false
             )
         }
     }
 
-    // Toggle content selection for personal notes
+    // Toggle content selection for personal notes by Date
     fun toggleNoteItem(date: LocalDate, selected: Boolean) {
         _uiState.update { current ->
             val updated = current.availableNotes.map {
                 if (it.date == date) it.copy(isSelected = selected) else it
             }
+            val updatedDates = if (selected) current.selectedNoteDates + date else current.selectedNoteDates - date
             current.copy(
                 availableNotes = updated,
+                selectedNoteDates = updatedDates,
                 selectNoteN09 = updated.find { it.date.dayOfMonth == 9 }?.isSelected ?: false,
                 selectNoteN11 = updated.find { it.date.dayOfMonth == 11 }?.isSelected ?: false
             )
@@ -362,13 +467,21 @@ class CounselorSummaryViewModel(
     }
 
     fun toggleScreeningManual(selected: Boolean) {
-        val firstId = _uiState.value.availableScreenings.getOrNull(0)?.id ?: 1L
-        toggleScreeningItem(firstId, selected)
+        val manual = _uiState.value.availableScreenings.find { it.typeName.contains("Mandiri", ignoreCase = true) }
+        if (manual != null) {
+            toggleScreeningItem(manual.id, selected)
+        } else {
+            _uiState.update { it.copy(selectScreeningManual = selected) }
+        }
     }
 
     fun toggleScreeningRoutine(selected: Boolean) {
-        val secondId = _uiState.value.availableScreenings.getOrNull(1)?.id ?: 2L
-        toggleScreeningItem(secondId, selected)
+        val routine = _uiState.value.availableScreenings.find { it.typeName.contains("Berkala", ignoreCase = true) }
+        if (routine != null) {
+            toggleScreeningItem(routine.id, selected)
+        } else {
+            _uiState.update { it.copy(selectScreeningRoutine = selected) }
+        }
     }
 
     fun toggleIncludeNotes(included: Boolean) {
@@ -376,10 +489,15 @@ class CounselorSummaryViewModel(
             current.copy(
                 includePersonalNotes = included,
                 availableNotes = current.availableNotes.map { it.copy(isSelected = included) },
+                selectedNoteDates = if (included) current.availableNotes.map { it.date }.toSet() else emptySet(),
                 selectNoteN09 = if (included) current.selectNoteN09 else false,
                 selectNoteN11 = if (included) current.selectNoteN11 else false
             )
         }
+    }
+
+    fun toggleNoteDate(date: LocalDate, selected: Boolean) {
+        toggleNoteItem(date, selected)
     }
 
     fun toggleNoteN09(selected: Boolean) {
@@ -392,7 +510,6 @@ class CounselorSummaryViewModel(
         toggleNoteItem(targetDate, selected)
     }
 
-    // Workflow actions
     fun createSummary() {
         val currentState = _uiState.value
         if (currentState.recordedDays < 4) {
@@ -400,48 +517,91 @@ class CounselorSummaryViewModel(
             return
         }
 
+        if (previewMode) {
+            val hasScreenings = currentState.availableScreenings.any { it.isSelected } ||
+                currentState.selectScreeningManual || currentState.selectScreeningRoutine
+            val hasNotes = currentState.includePersonalNotes &&
+                (currentState.availableNotes.any { it.isSelected } || currentState.selectedNoteDates.isNotEmpty())
+            val snapshotId = if (hasScreenings || hasNotes) "S-02" else "S-01"
+            _uiState.update {
+                it.copy(
+                    screenState = CounselorScreenState.PREVIEW,
+                    snapshotId = snapshotId,
+                    sourceRevision = "r4"
+                )
+            }
+            return
+        }
+
+        if (currentState.isLoading) return
+
         viewModelScope.launch {
-            _uiState.update { it.copy(screenState = CounselorScreenState.PREPARING) }
+            _uiState.update { it.copy(screenState = CounselorScreenState.PREPARING, errorMessage = null) }
             delay(600)
 
-            val selectedScreeningIds = currentState.availableScreenings
-                .filter { it.isSelected }
-                .map { it.id }
+            try {
+                val selectedScreeningIds = currentState.availableScreenings
+                    .filter { it.isSelected }
+                    .map { it.id }
+                    .ifEmpty {
+                        listOfNotNull(
+                            if (currentState.selectScreeningManual) currentState.availableManualScreening?.id else null,
+                            if (currentState.selectScreeningRoutine) currentState.availableRoutineScreening?.id else null
+                        )
+                    }
+                    .distinct()
 
-            val selectedNoteDates = currentState.availableNotes
-                .filter { it.isSelected }
-                .map { it.date }
-
-            val result = createSummaryUseCase(
-                periodStartDate = currentState.periodStartDate,
-                periodEndDate = currentState.periodEndDate,
-                selectedScreeningIds = selectedScreeningIds,
-                selectedNoteDates = selectedNoteDates,
-                includeNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty(),
-                ruleVersion = currentState.ruleVersion
-            )
-
-            if (result.isSuccess) {
-                val savedSummary = result.getOrThrow()
-                _uiState.update {
-                    it.copy(
-                        screenState = CounselorScreenState.PREVIEW,
-                        createdSummary = savedSummary,
-                        snapshotId = "S-${savedSummary.id.toString().padStart(2, '0')}",
-                        sourceRevision = "r4"
-                    )
+                val selectedNoteDates = if (currentState.includePersonalNotes) {
+                    val fromItems = currentState.availableNotes.filter { it.isSelected }.map { it.date }
+                    if (fromItems.isNotEmpty()) fromItems else currentState.selectedNoteDates.toList()
+                } else {
+                    emptyList()
                 }
-            } else {
-                // Fallback for preview or mocked test environments
-                val hasScreenings = selectedScreeningIds.isNotEmpty() || currentState.selectScreeningManual || currentState.selectScreeningRoutine
-                val hasNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty()
-                val snapshotId = if (hasScreenings || hasNotes) "S-02" else "S-01"
 
+                val result = createSummaryUseCase(
+                    periodStartDate = currentState.periodStartDate,
+                    periodEndDate = currentState.periodEndDate,
+                    selectedScreeningIds = selectedScreeningIds,
+                    selectedNoteDates = selectedNoteDates,
+                    includeNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty(),
+                    ruleVersion = currentState.ruleVersion
+                )
+
+                if (result.isSuccess) {
+                    val savedSummary = result.getOrThrow()
+                    val timeStr = LocalDateTime.now().format(
+                        DateTimeFormatter.ofPattern("d MMMM yyyy · HH.mm", Locale.forLanguageTag("id"))
+                    )
+                    _uiState.update {
+                        it.copy(
+                            screenState = CounselorScreenState.PREVIEW,
+                            createdSummary = savedSummary,
+                            previewSummary = savedSummary,
+                            snapshotId = "S-${savedSummary.id.toString().padStart(2, '0')}",
+                            sourceRevision = "r4",
+                            createdTimeString = timeStr
+                        )
+                    }
+                } else {
+                    val ex = result.exceptionOrNull()
+                    val message = ex?.message ?: "Gagal membuat ringkasan"
+                    val insufficient = message.contains("Minimal 4", ignoreCase = true)
+                    _uiState.update {
+                        it.copy(
+                            screenState = if (insufficient) CounselorScreenState.INELIGIBLE else CounselorScreenState.SELECT_CONTENT,
+                            errorMessage = message
+                        )
+                    }
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                val message = exception.message ?: "Gagal membuat ringkasan"
+                val insufficient = message.contains("Minimal 4", ignoreCase = true)
                 _uiState.update {
                     it.copy(
-                        screenState = CounselorScreenState.PREVIEW,
-                        snapshotId = snapshotId,
-                        sourceRevision = "r4"
+                        screenState = if (insufficient) CounselorScreenState.INELIGIBLE else CounselorScreenState.SELECT_CONTENT,
+                        errorMessage = message
                     )
                 }
             }
@@ -450,66 +610,66 @@ class CounselorSummaryViewModel(
 
     fun exportPdf(context: Context) {
         viewModelScope.launch {
-            _uiState.update { it.copy(screenState = CounselorScreenState.GENERATING_PDF) }
+            _uiState.update { it.copy(screenState = CounselorScreenState.GENERATING_PDF, errorMessage = null) }
             delay(600)
 
-            val currentState = _uiState.value
-            val summaryToExport = currentState.createdSummary ?: CounselorSummary(
-                screeningResultId = currentState.availableScreenings.firstOrNull { it.isSelected }?.id,
-                periodStartDate = currentState.periodStartDate,
-                periodEndDate = currentState.periodEndDate,
-                includeCheckinAnalysis = true,
-                checkinDaysCount = currentState.recordedDays,
-                ruleVersion = currentState.ruleVersion,
-                snapshotJson = buildSnapshotJsonString(currentState)
-            )
+            try {
+                val currentState = _uiState.value
+                val summaryToExport = currentState.createdSummary ?: currentState.previewSummary ?: CounselorSummary(
+                    screeningResultId = currentState.availableScreenings.firstOrNull { it.isSelected }?.id,
+                    periodStartDate = currentState.periodStartDate,
+                    periodEndDate = currentState.periodEndDate,
+                    includeCheckinAnalysis = true,
+                    checkinDaysCount = currentState.recordedDays,
+                    ruleVersion = currentState.ruleVersion,
+                    snapshotJson = buildSnapshotJsonString(currentState)
+                )
 
-            // Ensure summary is persisted in counselorRepository if not already
-            val finalSummary = if (summaryToExport.id == 0L) {
-                counselorRepository.createSummary(summaryToExport).getOrDefault(summaryToExport)
-            } else {
-                summaryToExport
-            }
+                val finalSummary = if (summaryToExport.id == 0L) {
+                    counselorRepository.createSummary(summaryToExport).getOrDefault(summaryToExport)
+                } else {
+                    summaryToExport
+                }
 
-            val exportResult = exportPdfUseCase(context, finalSummary)
-            if (exportResult.isSuccess) {
+                val fileName = "Selaras-Ringkasan-${System.currentTimeMillis()}.pdf"
+                val file = withContext(Dispatchers.IO) {
+                    exportPdfUseCase(context, finalSummary, fileName).getOrThrow()
+                }
+
                 _uiState.update {
                     it.copy(
                         screenState = CounselorScreenState.EXPORT_SUCCESS,
-                        generatedPdfFile = exportResult.getOrNull(),
-                        createdSummary = finalSummary
+                        generatedPdfFile = file,
+                        createdSummary = finalSummary,
+                        previewSummary = finalSummary
                     )
                 }
-            } else {
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
                 _uiState.update {
                     it.copy(
                         screenState = CounselorScreenState.PDF_ERROR,
-                        errorMessage = exportResult.exceptionOrNull()?.message
+                        errorMessage = exception.message ?: "Gagal mengekspor PDF"
                     )
                 }
             }
         }
     }
 
-    fun refreshPreview() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(screenState = CounselorScreenState.PREPARING) }
-            delay(600)
-            _uiState.update {
-                it.copy(
-                    screenState = CounselorScreenState.PREVIEW,
-                    sourceRevision = "r5"
-                )
-            }
-        }
-    }
+    fun refreshPreview() = createSummary()
 
-    fun retryExport(context: Context) {
-        exportPdf(context)
-    }
+    fun retryExport(context: Context) = exportPdf(context)
 
     fun backToPreview() {
-        _uiState.update { it.copy(screenState = CounselorScreenState.PREVIEW) }
+        _uiState.update {
+            it.copy(
+                screenState = if (it.createdSummary != null || it.previewSummary != null || previewMode)
+                    CounselorScreenState.PREVIEW
+                else
+                    CounselorScreenState.SELECT_CONTENT
+            )
+        }
     }
 
     fun backToSelectContent() {
@@ -608,7 +768,7 @@ class CounselorSummaryViewModel(
         return """
         {
             "snapshotId": "${state.snapshotId}",
-            "createdAt": "${java.time.Instant.now()}",
+            "createdAt": "${Instant.now()}",
             "periodStartDate": "${state.periodStartDate}",
             "periodEndDate": "${state.periodEndDate}",
             "ruleVersion": "${state.ruleVersion}",
@@ -638,7 +798,8 @@ class CounselorSummaryViewModel(
                     screeningRepository = screeningRepository,
                     counselorRepository = counselorRepository,
                     createSummaryUseCase = createUseCase,
-                    getEligibilityUseCase = eligibilityUseCase
+                    getEligibilityUseCase = eligibilityUseCase,
+                    autoLoad = true
                 ) as T
             }
         }
@@ -667,6 +828,8 @@ class CounselorSummaryViewModel(
                 override fun getLatestScreeningResultFlow() = flowOf(null)
                 override suspend fun getLatestRoutineScreeningResult(): ScreeningResult? = null
                 override suspend fun getAnswersByScreeningResultId(screeningResultId: Long) = emptyList<ScreeningAnswer>()
+                override suspend fun getScreeningTypesUsedThisWeek(referenceDate: LocalDate): Set<ScreeningType> = emptySet()
+                override suspend fun countScreeningResultsByTypeBetween(screeningType: ScreeningType, startInclusive: Instant, endExclusive: Instant): Int = 0
             }
             val emptyCounselor = object : CounselorRepository {
                 override suspend fun createSummary(summary: CounselorSummary) = Result.success(summary)
@@ -677,7 +840,7 @@ class CounselorSummaryViewModel(
             }
             val createUseCase = CreateCounselorSummaryUseCase(emptyCheckIn, emptyScreening, emptyCounselor)
             val eligibilityUseCase = GetCounselorEligibilityUseCase(emptyCheckIn)
-            return CounselorSummaryViewModel(emptyCheckIn, emptyScreening, emptyCounselor, createUseCase, eligibilityUseCase)
+            return CounselorSummaryViewModel(emptyCheckIn, emptyScreening, emptyCounselor, createUseCase, eligibilityUseCase, previewMode = true)
         }
     }
 }

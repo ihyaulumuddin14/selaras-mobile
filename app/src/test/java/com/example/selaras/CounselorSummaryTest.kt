@@ -23,6 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
+import java.time.Instant
 
 class CounselorSummaryTest {
 
@@ -221,6 +222,24 @@ class CounselorSummaryTest {
         override fun getLatestScreeningResultFlow(): Flow<ScreeningResult?> = flowOf(screenings.lastOrNull())
         override suspend fun getLatestRoutineScreeningResult(): ScreeningResult? = null
         override suspend fun getAnswersByScreeningResultId(screeningResultId: Long) = emptyList<com.example.selaras.domain.model.ScreeningAnswer>()
+        override suspend fun getScreeningTypesUsedThisWeek(
+            referenceDate: LocalDate
+        ): Set<ScreeningType> {
+            return emptySet()
+        }
+
+        override suspend fun countScreeningResultsByTypeBetween(
+            screeningType: ScreeningType,
+            startInclusive: Instant,
+            endExclusive: Instant
+        ): Int {
+            return screenings.count { result ->
+                result.screeningType == screeningType &&
+                        result.completedAt >= startInclusive &&
+                        result.completedAt < endExclusive
+            }
+        }
+
     }
 
     private class FakeCounselorRepo : CounselorRepository {

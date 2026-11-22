@@ -138,7 +138,7 @@ class ExportCounselorSummaryPdfUseCase {
         }
 
         // Section 02: Hasil Skrining
-        canvas.drawText("02 · Hasil Skrining Terpilih (PHQ-9)", 40f, y, sectionTitlePaint)
+        canvas.drawText("02 · Hasil Skrining Terpilih", 40f, y, sectionTitlePaint)
         y += 16f
         val screenings = snapshot.optJSONArray("screenings")
         if (screenings != null && screenings.length() > 0) {
@@ -148,7 +148,13 @@ class ExportCounselorSummaryPdfUseCase {
                 val type = sc.optString("type")
                 val score = sc.optInt("score")
                 val cat = sc.optString("category")
-                val line = "• Skrining $type: Skor $score ($cat)"
+                val instrument = sc.optString("instrumentVersion", "")
+                val isDemo = instrument.startsWith("DEMO-", ignoreCase = true)
+                val line = if (isDemo) {
+                    "• Refleksi demo $type: Skor simulasi $score (tanpa interpretasi klinis)"
+                } else {
+                    "• Skrining $type: Skor $score ($cat)"
+                }
                 canvas.drawText(line, 52f, y, bodyPaint)
                 y += 14f
             }
