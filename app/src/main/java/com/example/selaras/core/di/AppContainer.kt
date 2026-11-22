@@ -78,7 +78,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
         DailyCheckInPromptManager.create(appContext)
     }
     override val getScreeningQuotaUseCase: GetScreeningQuotaUseCase by lazy {
-        GetScreeningQuotaUseCase(screeningRepository)
+        GetScreeningQuotaUseCase(screeningRepository, appSettingsRepository)
     }
 
     override val keyManager: KeyManager by lazy {

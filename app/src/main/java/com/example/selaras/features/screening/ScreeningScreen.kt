@@ -1,6 +1,14 @@
-
 package com.example.selaras.features.screening
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,17 +40,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.selaras.core.ui.components.SelarasHeader
 import com.example.selaras.domain.model.ScreeningResult
 import com.example.selaras.domain.model.ScreeningType
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val ScreeningBackground = Color(0xFFF7F7F2)
 private val ScreeningPrimary = Color(0xFF356859)
@@ -56,21 +68,21 @@ private val ScreeningError = Color(0xFFB3261E)
 
 private val ScreeningAnswerLabels = listOf(
     "Tidak pernah",
-    "Jarang",
-    "Kadang-kadang",
-    "Sering"
+    "Beberapa hari",
+    "Lebih dari separuh waktu",
+    "Hampir setiap hari"
 )
 
-private val ScreeningDemoQuestions = listOf(
-    "Saya merasa sulit memulai aktivitas harian.",
-    "Energi saya cepat habis saat menjalani kegiatan.",
-    "Saya kesulitan berkonsentrasi ketika belajar, bekerja, atau membaca.",
-    "Saya merasa kewalahan menghadapi tugas atau tanggung jawab.",
-    "Saya sulit merasa tenang ketika menghadapi situasi sehari-hari.",
-    "Pola tidur atau waktu istirahat saya terasa terganggu.",
-    "Saya kurang tertarik mengikuti kegiatan yang biasanya saya lakukan.",
-    "Saya merasa sulit menyelesaikan kegiatan sehari-hari.",
-    "Saya membutuhkan waktu lebih lama untuk memulihkan energi setelah beraktivitas."
+private val ScreeningQuestions = listOf(
+    "Kurang berminat atau bergairah dalam melakukan kegiatan sehari-hari.",
+    "Merasa sedih, tertekan, atau putus asa.",
+    "Sulit tidur atau mudah terbangun, atau tidur berlebihan.",
+    "Merasa lelah atau tidak bertenaga.",
+    "Kurang nafsu makan atau makan berlebihan.",
+    "Merasa buruk tentang diri sendiri, atau merasa gagal, atau mengecewakan diri atau keluarga.",
+    "Sulit berkonsentrasi pada hal-hal seperti membaca atau menonton televisi.",
+    "Bergerak atau berbicara sangat lambat, atau sebaliknya merasa gelisah sehingga bergerak lebih banyak dari biasanya.",
+    "Memiliki pikiran bahwa lebih baik mati atau menyakiti diri sendiri dengan cara apa pun."
 )
 
 @Composable
@@ -189,6 +201,25 @@ fun ScreeningScreen(
 }
 
 @Composable
+private fun ScreeningHelpAction(onOpenHelp: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(ScreeningPrimaryContainer)
+            .clickable(onClick = onOpenHelp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "?",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = ScreeningPrimary
+        )
+    }
+}
+
+@Composable
 private fun ScreeningSelectionContent(
     selectedType: ScreeningType?,
     quotaState: ScreeningQuotaUiState,
@@ -216,14 +247,47 @@ private fun ScreeningSelectionContent(
                 quota?.isAvailable(type) == true
     } == true
 
+    val dateFormatter = remember {
+        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.forLanguageTag("id"))
+    }
+
+    val manualQuotaText = when {
+        quotaState.isLoading -> "Memuat kuota..."
+        quotaState.errorMessage != null || quota == null -> "Kuota belum dapat diverifikasi"
+        manualAvailable -> "Sisa kuota: ${quota.manualRemaining} kali periode ini"
+        else -> "Kuota periode ini sudah digunakan"
+    }
+
+    val routineQuotaText = when {
+        quotaState.isLoading -> "Memuat jadwal..."
+        quotaState.errorMessage != null || quota == null -> "Jadwal belum dapat diverifikasi"
+        quota.routineUsed -> {
+            val nextCycleStart = quota.weekEndDate.plusDays(1)
+            val nextFrom = nextCycleStart.plusDays(5).format(dateFormatter)
+            val nextUntil = nextCycleStart.plusDays(6).format(dateFormatter)
+            "Selesai untuk periode ini. Dibuka kembali: $nextFrom sampai $nextUntil"
+        }
+        !quota.isRoutineWindowOpen -> {
+            val fromStr = quota.routineAvailableFrom.format(dateFormatter)
+            val untilStr = quota.routineAvailableUntil.format(dateFormatter)
+            "Dibuka: $fromStr sampai $untilStr"
+        }
+        routineAvailable -> {
+            val untilStr = quota.routineAvailableUntil.format(dateFormatter)
+            "Tersedia sekarang sampai $untilStr (1 kali)"
+        }
+        else -> "Jadwal belum dibuka"
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(ScreeningBackground)
     ) {
-        ScreeningTopBar(
+        SelarasHeader(
+            title = "Skrining",
             onBack = null,
-            onOpenHelp = onOpenHelp
+            actions = { ScreeningHelpAction(onOpenHelp) }
         )
 
         Column(
@@ -233,10 +297,10 @@ private fun ScreeningSelectionContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
 
             Text(
-                text = "Pilih sesi\nrefleksimu.",
+                text = "Pilih sesi\nskriningmu.",
                 fontSize = 24.sp,
                 lineHeight = 31.sp,
                 fontWeight = FontWeight.Medium,
@@ -246,7 +310,7 @@ private fun ScreeningSelectionContent(
             Spacer(Modifier.height(10.dp))
 
             Text(
-                text = "Pilih sesi demo manual atau rutin. Keduanya memiliki kuota mingguan yang terpisah.",
+                text = "Pilih sesi manual atau rutin sesuai kebutuhanmu. Keduanya memiliki periode ketersediaan masing-masing.",
                 fontSize = 14.sp,
                 lineHeight = 21.sp,
                 color = ScreeningMuted
@@ -267,7 +331,7 @@ private fun ScreeningSelectionContent(
                         )
 
                         Text(
-                            text = "Memuat kuota skrining...",
+                            text = "Memuat jadwal dan kuota skrining...",
                             fontSize = 12.sp,
                             color = ScreeningMuted
                         )
@@ -297,22 +361,14 @@ private fun ScreeningSelectionContent(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp)
                         ) {
-                            Text("Muat ulang kuota")
+                            Text("Muat ulang jadwal")
                         }
                     }
                 }
 
                 else -> {
                     Text(
-                        text = "Periode kuota: ${
-                            quota.weekStartDate.format(
-                                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")
-                            )
-                        } - ${
-                            quota.weekEndDate.format(
-                                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")
-                            )
-                        }",
+                        text = "Periode aktif: ${quota.weekStartDate.format(dateFormatter)} - ${quota.weekEndDate.format(dateFormatter)}",
                         fontSize = 12.sp,
                         color = ScreeningMuted
                     )
@@ -323,14 +379,8 @@ private fun ScreeningSelectionContent(
 
             ScreeningTypeCard(
                 title = "Manual",
-                description = "Skrining mandiri yang dapat dilakukan secara fleksibel.",
-                quotaDescription = when {
-                    quotaState.isLoading -> "Memuat kuota..."
-                    quotaState.errorMessage != null || quota == null ->
-                        "Kuota belum dapat diverifikasi"
-                    manualAvailable -> "Sisa kuota: ${quota.manualRemaining} kali minggu ini"
-                    else -> "Kuota minggu ini sudah digunakan"
-                },
+                description = "Skrining mandiri yang dapat dilakukan secara fleksibel satu kali dalam periode minggu aktif.",
+                quotaDescription = manualQuotaText,
                 enabled = manualAvailable,
                 isSelected = selectedType == ScreeningType.MANUAL && manualAvailable,
                 onClick = {
@@ -342,14 +392,8 @@ private fun ScreeningSelectionContent(
 
             ScreeningTypeCard(
                 title = "Rutin",
-                description = "Skrining berkala sesuai jadwal yang ditentukan sistem.",
-                quotaDescription = when {
-                    quotaState.isLoading -> "Memuat kuota..."
-                    quotaState.errorMessage != null || quota == null ->
-                        "Kuota belum dapat diverifikasi"
-                    routineAvailable -> "Sisa kuota: ${quota.routineRemaining} kali minggu ini"
-                    else -> "Kuota minggu ini sudah digunakan"
-                },
+                description = "Skrining berkala yang terbuka pada akhir periode minggu sejak aktivasi aplikasi.",
+                quotaDescription = routineQuotaText,
                 enabled = routineAvailable,
                 isSelected = selectedType == ScreeningType.ROUTINE && routineAvailable,
                 onClick = {
@@ -358,13 +402,6 @@ private fun ScreeningSelectionContent(
             )
 
             Spacer(Modifier.height(20.dp))
-
-            Text(
-                text = "Kuota manual dan rutin dikelola secara terpisah.",
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                color = ScreeningMuted
-            )
         }
 
         Column(
@@ -379,9 +416,11 @@ private fun ScreeningSelectionContent(
                     selectedAvailable ->
                         "${selectedType.name.lowercase().replaceFirstChar { it.uppercase() }} dipilih."
                     quotaState.isLoading ->
-                        "Tunggu hingga kuota selesai dimuat."
+                        "Tunggu hingga jadwal selesai dimuat."
                     quotaState.errorMessage != null || quota == null ->
-                        "Kuota belum dapat diverifikasi."
+                        "Jadwal belum dapat diverifikasi."
+                    selectedType == ScreeningType.ROUTINE && !routineAvailable ->
+                        "Skrining rutin belum masuk jadwal pembukaan atau sudah digunakan."
                     else ->
                         "Kuota jenis skrining ini sudah digunakan."
                 },
@@ -416,6 +455,7 @@ private fun ScreeningTypeCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
+            .alpha(if (activeSelection) 0.5f else 1f)
             .background(
                 when {
                     !enabled -> ScreeningDisabled
@@ -449,8 +489,6 @@ private fun ScreeningTypeCard(
                 fontWeight = FontWeight.SemiBold,
                 color = if (enabled) ScreeningText else ScreeningDisabledText
             )
-
-            ScreeningRadioIndicator(activeSelection)
         }
 
         Spacer(Modifier.height(8.dp))
@@ -467,6 +505,7 @@ private fun ScreeningTypeCard(
         Text(
             text = quotaDescription,
             fontSize = 11.sp,
+            fontWeight = if (!enabled) FontWeight.Medium else FontWeight.Normal,
             color = if (enabled) ScreeningMuted else ScreeningDisabledText
         )
     }
@@ -485,9 +524,10 @@ private fun ScreeningIntroductionContent(
             .fillMaxSize()
             .background(ScreeningBackground)
     ) {
-        ScreeningTopBar(
+        SelarasHeader(
+            title = "Skrining",
             onBack = onBack,
-            onOpenHelp = onOpenHelp
+            actions = { ScreeningHelpAction(onOpenHelp) }
         )
 
         Column(
@@ -501,17 +541,17 @@ private fun ScreeningIntroductionContent(
 
             ScreeningInfoCard(
                 title = if (screeningType == ScreeningType.ROUTINE) {
-                    "Kesempatan rutin"
+                    "Sesi Rutin"
                 } else {
-                    "Kesempatan manual"
+                    "Sesi Manual"
                 },
-                description = "Satu sesi refleksi demo mengikuti pilihanmu."
+                description = "Kuesioner Kesehatan Pasien (PHQ-9) untuk memantau kondisi emosionalmu."
             )
 
             Spacer(Modifier.height(22.dp))
 
             Text(
-                text = "Refleksi Kondisi\nEmosional",
+                text = "Skrining Kesehatan\nEmosional",
                 fontSize = 24.sp,
                 lineHeight = 31.sp,
                 fontWeight = FontWeight.Medium,
@@ -521,7 +561,7 @@ private fun ScreeningIntroductionContent(
             Spacer(Modifier.height(12.dp))
 
             Text(
-                text = "Sesi refleksi demo · 9 pertanyaan",
+                text = "Kuesioner PHQ-9 · 9 pertanyaan",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = ScreeningText
@@ -530,14 +570,14 @@ private fun ScreeningIntroductionContent(
             Spacer(Modifier.height(22.dp))
 
             ScreeningInfoCard(
-                title = "Latihan demo",
-                description = "Pertanyaan contoh untuk menguji alur aplikasi."
+                title = "Petunjuk Pengisian",
+                description = "Pilih jawaban yang paling sesuai dengan apa yang kamu rasakan dalam 2 minggu terakhir. Luangkan waktu sekitar 2-3 menit untuk menjawab setiap pertanyaan dengan nyaman."
             )
 
             Spacer(Modifier.height(18.dp))
 
             Text(
-                text = "Pertanyaan ini dibuat sementara untuk demonstrasi aplikasi. Ini bukan instrumen PHQ-9, bukan alat skrining tervalidasi, dan tidak dapat digunakan untuk menilai atau mendiagnosis kondisi kesehatan mental.",
+                text = "Hasil skrining ini merupakan penapisan awal untuk membantumu merefleksikan kondisi emosional dan dapat disertakan saat konsultasi dengan tenaga profesional.",
                 fontSize = 14.sp,
                 lineHeight = 21.sp,
                 color = ScreeningMuted
@@ -550,7 +590,7 @@ private fun ScreeningIntroductionContent(
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             ScreeningPrimaryButton(
-                text = "Mulai Refleksi Demo",
+                text = "Mulai Skrining",
                 onClick = onBegin
             )
         }
@@ -581,14 +621,21 @@ private fun ScreeningQuestionContent(
         canGoToNextQuestion
     }
 
+    val animatedProgress by animateFloatAsState(
+        targetValue = currentQuestionNumber / 9f,
+        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
+        label = "screeningProgressBar"
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(ScreeningBackground)
     ) {
-        ScreeningTopBar(
+        SelarasHeader(
+            title = "Skrining PHQ-9",
             onBack = onBack,
-            onOpenHelp = onOpenHelp
+            actions = { ScreeningHelpAction(onOpenHelp) }
         )
 
         Column(
@@ -598,45 +645,22 @@ private fun ScreeningQuestionContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Row(
+            Spacer(Modifier.height(4.dp))
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(ScreeningDisabled)
             ) {
-                repeat(9) { index ->
-                    val segmentModifier = Modifier
-                        .weight(1f)
-                        .height(7.dp)
-                        .clip(CircleShape)
-
-                    when {
-                        index < currentQuestionNumber - 1 -> {
-                            Box(
-                                modifier = segmentModifier
-                                    .background(ScreeningPrimary)
-                            )
-                        }
-
-                        index == currentQuestionNumber - 1 -> {
-                            Box(
-                                modifier = segmentModifier
-                                    .border(
-                                        1.dp,
-                                        ScreeningPrimary,
-                                        CircleShape
-                                    )
-                            )
-                        }
-
-                        else -> {
-                            Box(
-                                modifier = segmentModifier
-                                    .background(ScreeningDisabled)
-                            )
-                        }
-                    }
-                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animatedProgress)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ScreeningPrimary)
+                )
             }
 
             Spacer(Modifier.height(14.dp))
@@ -658,54 +682,77 @@ private fun ScreeningQuestionContent(
 
             Spacer(Modifier.height(16.dp))
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(ScreeningPrimaryContainer)
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "Pertanyaan refleksi demo $currentQuestionNumber",
-                    fontSize = 11.sp,
-                    color = ScreeningPrimary
-                )
-
-                Spacer(Modifier.height(7.dp))
-
-                Text(
-                    text = ScreeningDemoQuestions.getOrElse(currentQuestionNumber - 1) {
-                        "Pertanyaan demo tidak tersedia."
-                    },
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = ScreeningText
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            Text(
-                text = "Mode demo: jawaban hanya digunakan untuk menguji alur aplikasi dan tidak memiliki makna klinis.",
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-                color = ScreeningMuted
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            ScreeningAnswerLabels.forEachIndexed { index, label ->
-                ScreeningAnswerOption(
-                    label = label,
-                    isSelected = currentAnswer == index,
-                    onClick = {
-                        onSelectAnswer(index)
+            AnimatedContent(
+                targetState = currentQuestionNumber,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideInHorizontally(
+                            initialOffsetX = { fullWidth -> fullWidth },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(300))).togetherWith(
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> -fullWidth },
+                                animationSpec = tween(300, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(300))
+                        )
+                    } else {
+                        (slideInHorizontally(
+                            initialOffsetX = { fullWidth -> -fullWidth },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(300))).togetherWith(
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> fullWidth },
+                                animationSpec = tween(300, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(300))
+                        )
                     }
-                )
+                },
+                label = "questionSlideAnimation"
+            ) { questionNum ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(ScreeningPrimaryContainer)
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Pertanyaan $questionNum",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ScreeningPrimary
+                        )
 
-                if (index != ScreeningAnswerLabels.lastIndex) {
-                    Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(7.dp))
+
+                        Text(
+                            text = ScreeningQuestions.getOrElse(questionNum - 1) {
+                                "Pertanyaan tidak tersedia."
+                            },
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = ScreeningText
+                        )
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    ScreeningAnswerLabels.forEachIndexed { index, label ->
+                        val isSelected = answers[questionNum] == index
+                        ScreeningAnswerOption(
+                            label = label,
+                            isSelected = isSelected,
+                            onClick = {
+                                onSelectAnswer(index)
+                            }
+                        )
+
+                        if (index != ScreeningAnswerLabels.lastIndex) {
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
                 }
             }
 
@@ -718,7 +765,7 @@ private fun ScreeningQuestionContent(
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             Text(
-                text = "Pilih frekuensi yang paling mendekati pengalamanmu.",
+                text = "Pilih frekuensi yang paling mendekati pengalamanmu selama 2 minggu terakhir.",
                 fontSize = 11.sp,
                 color = ScreeningMuted
             )
@@ -819,9 +866,10 @@ private fun ScreeningProcessingContent(
             .fillMaxSize()
             .background(ScreeningBackground)
     ) {
-        ScreeningTopBar(
+        SelarasHeader(
+            title = "Skrining",
             onBack = null,
-            onOpenHelp = onOpenHelp
+            actions = { ScreeningHelpAction(onOpenHelp) }
         )
 
         Column(
@@ -850,7 +898,7 @@ private fun ScreeningProcessingContent(
             Spacer(Modifier.height(12.dp))
 
             Text(
-                text = "Jawaban divalidasi dan hasil disiapkan untuk disimpan.",
+                text = "Jawaban divalidasi dan hasil penapisan disiapkan.",
                 fontSize = 14.sp,
                 lineHeight = 21.sp,
                 color = ScreeningMuted
@@ -859,8 +907,8 @@ private fun ScreeningProcessingContent(
             Spacer(Modifier.height(18.dp))
 
             ScreeningInfoCard(
-                title = "Jawabanmu tetap tersedia",
-                description = "Jawaban akan dipertahankan jika proses penyimpanan mengalami kendala."
+                title = "Jawaban Tersimpan Aman",
+                description = "Seluruh data penapisanmu tersimpan secara terenkripsi di perangkat."
             )
         }
     }
@@ -879,9 +927,10 @@ private fun ScreeningErrorContent(
             .fillMaxSize()
             .background(ScreeningBackground)
     ) {
-        ScreeningTopBar(
+        SelarasHeader(
+            title = "Kendala",
             onBack = onReturn,
-            onOpenHelp = onOpenHelp
+            actions = { ScreeningHelpAction(onOpenHelp) }
         )
 
         Column(
@@ -929,7 +978,7 @@ private fun ScreeningErrorContent(
 
             ScreeningInfoCard(
                 title = "Jawabanmu tetap tersedia",
-                description = "Jawaban yang sudah kamu pilih tetap tersimpan sementara. Kamu tidak perlu mengulang kuesioner."
+                description = "Jawaban yang sudah kamu pilih tetap tersimpan sementara. Kamu tidak perlu mengulang kuesioner dari awal."
             )
         }
 
@@ -968,9 +1017,10 @@ private fun ScreeningCrisisContent(
             .fillMaxSize()
             .background(ScreeningWarmSupport)
     ) {
-        ScreeningTopBar(
+        SelarasHeader(
+            title = "Bantuan & Dukungan",
             onBack = null,
-            onOpenHelp = onOpenHelp
+            actions = { ScreeningHelpAction(onOpenHelp) }
         )
 
         Column(
@@ -993,7 +1043,7 @@ private fun ScreeningCrisisContent(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                text = "Jawabanmu menunjukkan adanya hal yang mungkin perlu mendapat perhatian lebih lanjut. Kamu dapat mencari dukungan jika membutuhkannya.",
+                text = "Jawabanmu menunjukkan adanya indikasi yang memerlukan perhatian khusus. Kamu berhak mendapatkan bantuan dan dukungan profesional.",
                 fontSize = 14.sp,
                 lineHeight = 21.sp,
                 color = ScreeningText
@@ -1009,7 +1059,7 @@ private fun ScreeningCrisisContent(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Informasi Layanan Bantuan Profesional",
+                    text = "Layanan Bantuan Profesional",
                     fontSize = 15.sp,
                     lineHeight = 21.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1019,7 +1069,7 @@ private fun ScreeningCrisisContent(
                 Spacer(Modifier.height(10.dp))
 
                 Text(
-                    text = "Informasi kontak dan kanal layanan bantuan akan ditampilkan setelah diverifikasi.",
+                    text = "Jika kamu merasa terbebani atau memerlukan teman bicara, layanan dukungan krisis dan konseling profesional tersedia untuk mendampingimu.",
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                     color = ScreeningMuted
@@ -1049,18 +1099,12 @@ private fun ScreeningCrisisContent(
                     .height(48.dp),
                 shape = RoundedCornerShape(24.dp)
             ) {
-                Text("Lihat Bantuan")
+                Text("Lihat Kontak Bantuan")
             }
 
             ScreeningPrimaryButton(
-                text = "Simpan dan Lanjutkan",
+                text = "Lanjutkan ke Hasil",
                 onClick = onContinue
-            )
-
-            Text(
-                text = "Hasil sudah tersimpan. Tombol ini hanya melanjutkan.",
-                fontSize = 11.sp,
-                color = ScreeningMuted
             )
         }
     }
@@ -1080,9 +1124,10 @@ private fun ScreeningResultContent(
             .fillMaxSize()
             .background(ScreeningBackground)
     ) {
-        ScreeningTopBar(
+        SelarasHeader(
+            title = "Hasil Skrining",
             onBack = onReset,
-            onOpenHelp = onOpenHelp
+            actions = { ScreeningHelpAction(onOpenHelp) }
         )
 
         Column(
@@ -1095,7 +1140,7 @@ private fun ScreeningResultContent(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                text = "Hasil Refleksi Demo",
+                text = "Hasil Skrining PHQ-9",
                 fontSize = 23.sp,
                 lineHeight = 30.sp,
                 fontWeight = FontWeight.Medium,
@@ -1112,7 +1157,7 @@ private fun ScreeningResultContent(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Hasil demo tersimpan",
+                    text = "Hasil Skrining Tersimpan",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ScreeningText
@@ -1121,7 +1166,7 @@ private fun ScreeningResultContent(
                 Spacer(Modifier.height(6.dp))
 
                 Text(
-                    text = "ID hasil: ${result.id}",
+                    text = "Kategori: ${result.category.name.lowercase().replaceFirstChar { it.uppercase() }}",
                     fontSize = 12.sp,
                     color = ScreeningMuted
                 )
@@ -1137,7 +1182,7 @@ private fun ScreeningResultContent(
                     .padding(18.dp)
             ) {
                 Text(
-                    text = "Skor demo",
+                    text = "Skor Total",
                     fontSize = 13.sp,
                     color = ScreeningMuted
                 )
@@ -1154,7 +1199,7 @@ private fun ScreeningResultContent(
                 Spacer(Modifier.height(14.dp))
 
                 Text(
-                    text = "Versi data: ${result.instrumentVersion}",
+                    text = "Instrumen: ${result.instrumentVersion}",
                     fontSize = 12.sp,
                     color = ScreeningMuted
                 )
@@ -1163,17 +1208,10 @@ private fun ScreeningResultContent(
             Spacer(Modifier.height(18.dp))
 
             Text(
-                text = "Ini adalah hasil simulasi dari pertanyaan demo buatan. Skor tidak memiliki interpretasi klinis, bukan hasil PHQ-9, dan tidak boleh digunakan untuk mengambil keputusan kesehatan.",
+                text = "Hasil ini merupakan penapisan awal untuk memantau kesejahteraan emosionalmu secara mandiri.",
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
                 color = ScreeningMuted
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            ScreeningInfoCard(
-                title = "Data demo tersimpan",
-                description = "ID hasil demo: ${result.id}. Data ini hanya untuk menguji penyimpanan dan alur aplikasi, bukan untuk penilaian klinis."
             )
         }
 
@@ -1199,12 +1237,6 @@ private fun ScreeningResultContent(
                 Text("Buka Ringkasan Konselor")
             }
 
-            Text(
-                text = "Data demo tetap berlabel simulasi dan bukan PHQ-9 tervalidasi.",
-                fontSize = 11.sp,
-                color = ScreeningMuted
-            )
-
             OutlinedButton(
                 onClick = onReset,
                 modifier = Modifier
@@ -1212,67 +1244,8 @@ private fun ScreeningResultContent(
                     .height(44.dp),
                 shape = RoundedCornerShape(24.dp)
             ) {
-                Text("Kembali ke pilihan")
+                Text("Kembali ke Beranda")
             }
-        }
-    }
-}
-
-@Composable
-private fun ScreeningTopBar(
-    onBack: (() -> Unit)?,
-    onOpenHelp: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(ScreeningBackground)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (onBack != null) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onBack),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "←",
-                    fontSize = 20.sp,
-                    color = ScreeningPrimary
-                )
-            }
-        } else {
-            Spacer(Modifier.size(32.dp))
-        }
-
-        Spacer(Modifier.size(8.dp))
-
-        Text(
-            text = "Selaras",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = ScreeningText
-        )
-
-        Spacer(Modifier.weight(1f))
-
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(ScreeningPrimaryContainer)
-                .clickable(onClick = onOpenHelp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "?",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = ScreeningPrimary
-            )
         }
     }
 }

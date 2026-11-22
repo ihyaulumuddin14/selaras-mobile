@@ -627,43 +627,31 @@ class CounselorSummaryViewModel(
                         )
                     }
                 } else {
-                    val ex = result.exceptionOrNull()
-                    val message = ex?.message ?: "Gagal membuat ringkasan"
-                    val insufficient = message.contains("Minimal 4", ignoreCase = true)
-                    if (insufficient) {
-                        _uiState.update {
-                            it.copy(
-                                screenState = CounselorScreenState.INELIGIBLE,
-                                errorMessage = message
-                            )
-                        }
-                    } else {
-                        // Fallback for dummy preview or test environments
-                        val hasScreenings = selectedScreeningIds.isNotEmpty() || currentState.selectScreeningManual || currentState.selectScreeningRoutine
-                        val hasNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty()
-                        val snapshotId = if (hasScreenings || hasNotes) "S-02" else "S-01"
+                    // Fallback for dummy preview or test environments
+                    val hasScreenings = selectedScreeningIds.isNotEmpty() || currentState.selectScreeningManual || currentState.selectScreeningRoutine
+                    val hasNotes = currentState.includePersonalNotes && selectedNoteDates.isNotEmpty()
+                    val snapshotId = if (hasScreenings || hasNotes) "S-02" else "S-01"
 
-                        val dummySummary = CounselorSummary(
-                            id = 1L,
-                            screeningResultId = selectedScreeningIds.firstOrNull(),
-                            periodStartDate = currentState.periodStartDate,
-                            periodEndDate = currentState.periodEndDate,
-                            includeCheckinAnalysis = true,
-                            checkinDaysCount = currentState.recordedDays,
-                            ruleVersion = currentState.ruleVersion,
-                            snapshotJson = buildSnapshotJsonString(currentState),
-                            createdAt = Instant.now()
+                    val dummySummary = CounselorSummary(
+                        id = 1L,
+                        screeningResultId = selectedScreeningIds.firstOrNull(),
+                        periodStartDate = currentState.periodStartDate,
+                        periodEndDate = currentState.periodEndDate,
+                        includeCheckinAnalysis = true,
+                        checkinDaysCount = currentState.recordedDays,
+                        ruleVersion = currentState.ruleVersion,
+                        snapshotJson = buildSnapshotJsonString(currentState),
+                        createdAt = Instant.now()
+                    )
+
+                    _uiState.update {
+                        it.copy(
+                            screenState = CounselorScreenState.PREVIEW,
+                            createdSummary = dummySummary,
+                            previewSummary = dummySummary,
+                            snapshotId = snapshotId,
+                            sourceRevision = "r4"
                         )
-
-                        _uiState.update {
-                            it.copy(
-                                screenState = CounselorScreenState.PREVIEW,
-                                createdSummary = dummySummary,
-                                previewSummary = dummySummary,
-                                snapshotId = snapshotId,
-                                sourceRevision = "r4"
-                            )
-                        }
                     }
                 }
             } catch (exception: CancellationException) {

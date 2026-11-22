@@ -212,7 +212,7 @@ class ScreeningViewModel(
                 _uiState.update {
                     it.copy(
                         step = ScreeningStep.ERROR,
-                        errorMessage = exception.message ?: "Gagal menyimpan hasil refleksi"
+                        errorMessage = exception.message ?: "Gagal menyimpan hasil skrining"
                     )
                 }
             }
@@ -249,8 +249,8 @@ class ScreeningViewModel(
 
     private fun quotaUnavailableMessage(type: ScreeningType): String {
         return when (type) {
-            ScreeningType.MANUAL -> "Kuota sesi manual minggu ini sudah digunakan. Coba kembali minggu depan."
-            ScreeningType.ROUTINE -> "Kuota sesi rutin minggu ini sudah digunakan. Coba kembali minggu depan."
+            ScreeningType.MANUAL -> "Sesi skrining manual belum tersedia atau kuota periode ini sudah digunakan."
+            ScreeningType.ROUTINE -> "Sesi skrining rutin belum dibuka atau kuota periode ini sudah digunakan."
         }
     }
 
@@ -259,6 +259,7 @@ class ScreeningViewModel(
 
     companion object {
         const val DEMO_INSTRUMENT_VERSION = "DEMO-REFLECTION-v1"
+        const val DEFAULT_INSTRUMENT_VERSION = DEMO_INSTRUMENT_VERSION
         private const val DEMO_INSTRUMENT_PREFIX = "DEMO-"
         private const val MIN_ANSWER = 0
         private const val MAX_ANSWER = 3

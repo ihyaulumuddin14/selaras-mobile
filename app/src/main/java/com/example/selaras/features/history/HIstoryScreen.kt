@@ -167,7 +167,6 @@ fun HistoryScreen(
 
 @Composable
 private fun HistoryResultCard(result: ScreeningResult, onClick: () -> Unit) {
-    val isDemo = result.instrumentVersion.startsWith("DEMO-", ignoreCase = true)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -178,7 +177,7 @@ private fun HistoryResultCard(result: ScreeningResult, onClick: () -> Unit) {
             .padding(16.dp)
     ) {
         Text(
-            "${if (result.screeningType == ScreeningType.MANUAL) "Manual" else "Rutin"} · ${if (isDemo) "Refleksi Demo" else "Skrining"}",
+            "${if (result.screeningType == ScreeningType.MANUAL) "Manual" else "Rutin"} · Skrining PHQ-9",
             color = HistoryText, fontWeight = FontWeight.Bold, fontSize = 16.sp
         )
         Spacer(Modifier.height(6.dp))
@@ -186,7 +185,7 @@ private fun HistoryResultCard(result: ScreeningResult, onClick: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text("Skor ${result.totalScore}/27 · ID #${result.id}", fontSize = 14.sp, color = HistoryPine, fontWeight = FontWeight.SemiBold)
         Text(
-            if (isDemo) "Skor simulasi, tanpa interpretasi klinis." else "Hasil skrining awal, bukan diagnosis medis.",
+            "Hasil penapisan awal untuk pemantauan mandiri.",
             fontSize = 12.sp, color = HistoryMuted
         )
         Spacer(Modifier.height(8.dp))
@@ -196,7 +195,6 @@ private fun HistoryResultCard(result: ScreeningResult, onClick: () -> Unit) {
 
 @Composable
 private fun HistoryResultDetail(result: ScreeningResult) {
-    val isDemo = result.instrumentVersion.startsWith("DEMO-", ignoreCase = true)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -204,14 +202,14 @@ private fun HistoryResultDetail(result: ScreeningResult) {
             .background(Color.White)
             .padding(16.dp)
     ) {
-        Text("${if (isDemo) "Hasil Refleksi Demo" else "Hasil Skrining"} #${result.id}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = HistoryText)
+        Text("Hasil Skrining #${result.id}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = HistoryText)
         Spacer(Modifier.height(8.dp))
         Text("Jenis: ${if (result.screeningType == ScreeningType.MANUAL) "Manual" else "Rutin"}", color = HistoryMuted)
         Text("Skor: ${result.totalScore} dari 27", color = HistoryPine, fontWeight = FontWeight.SemiBold)
         Text("Versi: ${result.instrumentVersion}", color = HistoryMuted, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
         Text(
-            if (isDemo) "Ini data simulasi. Tidak dapat digunakan untuk menilai kondisi kesehatan mental." else "Hasil ini bukan diagnosis medis.",
+            "Hasil penapisan awal untuk membantumu merefleksikan kondisi emosional.",
             color = HistoryMuted, fontSize = 13.sp, lineHeight = 19.sp
         )
         Spacer(Modifier.height(16.dp))
@@ -220,10 +218,10 @@ private fun HistoryResultDetail(result: ScreeningResult) {
         if (result.answers.isEmpty()) {
             Text("Tidak ada rincian jawaban yang dapat dibaca.", color = HistoryMuted)
         } else {
-            val demoLabels = listOf("Tidak pernah", "Jarang", "Kadang-kadang", "Sering")
+            val answerLabels = listOf("Tidak pernah", "Beberapa hari", "Lebih dari separuh waktu", "Hampir setiap hari")
             result.answers.sortedBy { it.questionNumber }.forEach { answer ->
                 Text(
-                    "Pertanyaan ${answer.questionNumber}: ${if (isDemo) demoLabels.getOrElse(answer.answerValue) { "-" } else "Nilai ${answer.answerValue}"}",
+                    "Pertanyaan ${answer.questionNumber}: ${answerLabels.getOrElse(answer.answerValue) { "Nilai ${answer.answerValue}" }}",
                     color = HistoryText, fontSize = 13.sp,
                     modifier = Modifier.padding(vertical = 5.dp)
                 )
